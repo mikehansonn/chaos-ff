@@ -1,0 +1,16 @@
+uvicorn==0.32.0
+fastapi==0.115.4
+dnspython==2.7.0
+motor==3.6.0
+pymongo==4.9.2
+python-dotenv==1.0.1
+aiohttp==3.10.10
+selenium==4.25.0
+pydantic==1.10.18
+python-jose==3.3.0
+passlib==1.7.4
+python-multipart==0.0.16
+bcrypt==4.2.0
+redis>=4.0.0
+celery>=5.0.0
+requests==2.32.3
