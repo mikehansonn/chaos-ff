@@ -7,12 +7,14 @@ from pydantic import BaseModel
 from models import PyObjectId, Matchup, Draft
 from pymongo.errors import PyMongoError
 from bson.errors import InvalidId
+from datetime import datetime, time, timezone
+from typing import Tuple
 
 router = APIRouter()
 
 class LeagueCreate(BaseModel):
     name: str
-    comissioner: PyObjectId
+    commissioner: PyObjectId
     number_of_players: int
 
 class LeagueJoin(BaseModel):
@@ -50,14 +52,22 @@ POSITION_MAPPING = {
 @router.post("/leagues/create/", response_model=League)
 async def create_league(league: LeagueCreate):
     db = get_database()
-
     try:
         async with await db.client.start_session() as session:
             async with session.start_transaction():
+                try:
+                    user_id = PyObjectId(league.commissioner)
+                except Exception:
+                    raise HTTPException(status_code=400, detail="Invalid league ID format")
+                
+                user = await db.users.find_one({'_id': user_id}, session=session)
+                if len(user["leagues"]) >= 10:
+                    raise HTTPException(status_code=403, detail="You are in too many leagues")
+                
                 # Create the new league
                 new_league = League(
                     name=league.name,
-                    commissioner=league.comissioner,
+                    commissioner=league.commissioner,
                     number_of_players=league.number_of_players,
                     teams=[]
                 )
@@ -67,7 +77,7 @@ async def create_league(league: LeagueCreate):
                 # Create a new team for the user
                 new_team = Team(
                     name=f"{league.name} Team",
-                    owner=league.comissioner,
+                    owner=league.commissioner,
                     league=new_league_id,
                 )
                 team_result = await db.teams.insert_one(new_team.dict(by_alias=True), session=session)
@@ -90,7 +100,7 @@ async def create_league(league: LeagueCreate):
 
                 # Update the user's leagues and teams
                 await db.users.update_one(
-                    {"_id": league.comissioner},
+                    {"_id": league.commissioner},
                     {
                         "$push": {
                             "leagues": new_league_id,
@@ -119,21 +129,35 @@ async def join_league(content: LeagueJoin):
     try:
         async with await db.client.start_session() as session:
             async with session.start_transaction():
+                try:
+                    user_id = PyObjectId(content.user_id)
+                except Exception:
+                    raise HTTPException(status_code=403, detail="No League with this Invite ID")
+                
+                user = await db.users.find_one({'_id': user_id}, session=session)
+                if len(user["leagues"]) >= 10:
+                    raise HTTPException(status_code=403, detail="You are in too many leagues")
+                
                 # Check if the league exists
                 league = await db.leagues.find_one({"_id": content.league_id}, session=session)
                 if not league:
-                    raise HTTPException(status_code=404, detail="League not found")
+                    raise HTTPException(status_code=403, detail="No League with this Invite ID")
 
                 # Check if the user is already in the league
                 user = await db.users.find_one({"_id": content.user_id}, session=session)
                 if not user:
                     raise HTTPException(status_code=404, detail="User not found")
                 if content.league_id in user.get("leagues", []):
-                    raise HTTPException(status_code=400, detail="User is already in this league")
+                    raise HTTPException(status_code=403, detail="You are already in this league")
 
                 # Check if the league is full
                 if len(league.get("teams", [])) >= league.get("number_of_players", 0):
-                    raise HTTPException(status_code=400, detail="League is full")
+                    raise HTTPException(status_code=403, detail="This league is already full")
+                
+                # Check if the league has already started
+                draft = await db.drafts.find_one({"_id": league["draft"]}, session=session)
+                if draft and draft['status'] != 'scheduled':
+                    raise HTTPException(status_code=403, detail="This league has already started")          
 
                 # Create a new team for the user
                 new_team = Team(
@@ -176,9 +200,19 @@ async def join_league(content: LeagueJoin):
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Database error occurred: {str(e)}")
 
+def calculate_nfl_weeks() -> Tuple[int, int]:
+    season_start = datetime.combine(datetime(2024, 9, 4), time(0, 0), tzinfo=timezone.utc)
+    current_time = datetime.now(timezone.utc)
+    days_since_start = (current_time - season_start).days
+    current_week = (days_since_start // 7) + 1
+
+    current_week = max(1, min(18, current_week))
+
+    return current_week, current_week
+
 async def create_schedule(league_id: str, session: ClientSession = None):
     db = get_database()
-
+    
     try:
         object_id = PyObjectId(league_id)
     except Exception:
@@ -187,12 +221,13 @@ async def create_schedule(league_id: str, session: ClientSession = None):
     league = await db.leagues.find_one({"_id": object_id}, session=session)
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
-
+    
     teams = league['teams']
     if len(teams) % 2 == 1:
-        teams.append(PyObjectId())
+        teams.append(PyObjectId())  # Add bye week team if odd number
     num_teams = len(teams)
-
+    
+    # Delete existing matchups
     matchups = league['schedule'].copy()
     for week in matchups:
         for matchup_id in week:
@@ -204,24 +239,38 @@ async def create_schedule(league_id: str, session: ClientSession = None):
                 print(f"Error deleting matchup {matchup_id}: {str(e)}")
     
     schedule = []
-    for round_num in range(num_teams - 1):
+    current_week, _ = calculate_nfl_weeks()
+    remaining_weeks = list(range(current_week, 19))  # Weeks 9-18 if starting at week 9
+    
+    # Calculate how many rounds we need to repeat to fill the remaining weeks
+    base_schedule_rounds = num_teams - 1
+    num_remaining_weeks = len(remaining_weeks)
+    
+    # Generate unique matchups for each remaining week
+    teams_copy = teams.copy()
+    for week_num in remaining_weeks:
         round_matches = []
+        
+        # Rotate teams for variety in matchups
+        teams_copy = [teams_copy[0]] + [teams_copy[-1]] + teams_copy[1:-1]
+        
+        # Create matchups for this week
         for i in range(num_teams // 2):
-            team1 = teams[i]
-            team2 = teams[num_teams - i - 1]
+            team1 = teams_copy[i]
+            team2 = teams_copy[num_teams - i - 1]
+            
             new_match = Matchup(
-                league=object_id, 
-                week=round_num + 1,
+                league=object_id,
+                week=week_num,  # Use actual NFL week number
                 team_a=team1,
                 team_b=team2
             )
             match_id = await db.matchups.insert_one(new_match.dict(by_alias=True), session=session)
-            round_matches.append(str(match_id.inserted_id))  # Convert ObjectId to string
-        schedule.append(round_matches)
+            round_matches.append(str(match_id.inserted_id))
         
-        teams = [teams[0]] + [teams[-1]] + teams[1:-1]
+        schedule.append(round_matches)
     
-    schedule = (schedule * ((52 // len(schedule)) + 1))[:52]
+    # Update the league with the new schedule
     update_result = await db.leagues.update_one(
         {"_id": object_id},
         {"$set": {"schedule": schedule}},
@@ -292,6 +341,110 @@ async def add_team_to_league(league_id: str, team: TeamAdd):
     updated_league = await db.leagues.find_one({"_id": object_id})
     return League(**updated_league)
 
+@router.post("/leagues/{league_id}/teams/{team_id}/waiver")
+async def draft_player(league_id: str, team_id: str, player: PlayerDraft):
+    await check_player_availability(league_id, player.player_id)
+    
+    db = get_database()
+
+    try:
+        object_team_id = PyObjectId(team_id)
+        object_player_id = PyObjectId(player.player_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    
+    try:
+        async with await db.client.start_session() as session:
+            async with session.start_transaction():
+                # Fetch team details
+                team = await db.teams.find_one({"_id": object_team_id}, session=session)
+                if not team:
+                    raise HTTPException(status_code=404, detail="Team not found")
+                
+                # Fetch player details
+                player_doc = await db.nflplayers.find_one({"_id": object_player_id}, session=session)
+                if not player_doc:
+                    raise HTTPException(status_code=404, detail="Player not found")
+                
+                player_position = player_doc["position"]
+                
+                # Check roster constraints
+                roster = team.get("roster", [None] * 17)
+                
+                handle_roster = roster.copy()
+                # Fetch all player details for the roster
+                for i in range(len(handle_roster)):
+                    player_return = await db.nflplayers.find_one({"_id": handle_roster[i]}, session=session)
+                    if player_return != None:
+                        handle_roster[i] = player_return
+                    else:
+                        handle_roster[i] = None
+                
+                # Find available slot for the player
+                slot_index = None
+                if player_position == "QB" and handle_roster[0] is None:
+                    slot_index = 0
+                elif player_position == "RB" and (handle_roster[1] is None or handle_roster[2] is None):
+                    slot_index = 1 if handle_roster[1] is None else 2
+                elif player_position == "WR" and (handle_roster[3] is None or handle_roster[4] is None):
+                    slot_index = 3 if handle_roster[3] is None else 4
+                elif player_position == "TE" and handle_roster[5] is None:
+                    slot_index = 5
+                elif player_position in ["RB", "WR", "TE"] and handle_roster[6] is None:
+                    slot_index = 6  # FLEX position
+                elif player_position == "DEF" and handle_roster[7] is None:
+                    slot_index = 7
+                elif player_position == "K" and handle_roster[8] is None:
+                    slot_index = 8
+                
+                # If no specific slot found, try to add to bench
+                if slot_index is None:
+                    for i in range(9, 17):
+                        if handle_roster[i] is None:
+                            slot_index = i
+                            break
+                
+                if slot_index is None:
+                    raise HTTPException(status_code=400, detail="Team roster is full")
+                
+                # Update the roster
+                roster[slot_index] = object_player_id
+
+                # Update team in database
+                result = await db.teams.update_one(
+                    {"_id": object_team_id},
+                    {"$set": {"roster": roster}},
+                    session=session
+                )
+                
+                if result.modified_count == 0:
+                    raise HTTPException(status_code=500, detail="Failed to update team roster")
+
+                return {"message": f"Player successfully drafted to position {slot_index}"}
+    except PyMongoError as e:
+        raise HTTPException(status_code=500, detail=f"Database error occurred: {str(e)}")
+
+async def check_player_availability(league_id: str, player_id: str):
+    db = get_database()
+    
+    try:
+        league_object_id = PyObjectId(league_id)
+        player_object_id = PyObjectId(player_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+    league = await db.leagues.find_one({"_id": league_object_id})
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    
+    teams_with_player = await db.teams.count_documents({
+        "league": league_object_id,
+        "roster": {"$in": [player_object_id]}
+    })
+    
+    if teams_with_player > 0:
+        raise HTTPException(status_code=400, detail="Player already drafted or picked up in this league")
+    
 @router.get("/leagues/{league_id}/players/{player_id}/available")
 async def is_player_available(league_id: str, player_id: str):
     db = get_database()

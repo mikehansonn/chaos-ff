@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from './api';
 import { Route, Routes, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import LeagueNavbar from './LeagueNavbar';
 import DraftHome from './Draft';
-import { format, parseISO, addMinutes } from 'date-fns';
+import FilterDropdown from './Filter';
+
 
 const tokenUtil = {
   getToken: () => localStorage.getItem('token'),
@@ -21,16 +21,33 @@ const POSITION_MAPPING = {
   "BE": Array.from({ length: 8 }, (_, i) => i + 9)
 };
 
+const VALID_ROSTER_SLOTS = {
+  "QB": [0],
+  "RB": [1, 2, 6],
+  "WR": [3, 4, 6],
+  "TE": [5, 6],
+  "FLEX": [6],
+  "DEF": [7],
+  "K": [8],
+  "BENCH": Array.from({length: 8}, (_, i) => i + 9)
+};
 
-function LeagueCreate() {
+
+const LeagueCreate = () => {
   const [leagueData, setLeagueData] = useState({
     name: '',
-    comissioner: '',
+    commissioner: '',
     number_of_players: ''
   });
   const [userData, setUserData] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({
+    name: false,
+    nameLength: false,
+    number_of_players: false
+  });
+  const inputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -49,7 +66,7 @@ function LeagueCreate() {
         setUserData(response.data);
         setLeagueData(prevState => ({
           ...prevState,
-          comissioner: response.data._id
+          commissioner: response.data._id
         }));
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -69,12 +86,34 @@ function LeagueCreate() {
       ...prevState,
       [name]: value
     }));
-  }
+    // Clear validation errors when user starts typing
+    if (validationErrors[name] || validationErrors.nameLength) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: false,
+        nameLength: false
+      }));
+    }
+  };
 
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     setError('');
     setSuccess(false);
+    
+    // Validation
+    const newValidationErrors = {
+      name: !leagueData.name.trim(),
+      nameLength: leagueData.name.trim().length > 48,
+      number_of_players: !leagueData.number_of_players
+    };
+    
+    setValidationErrors(newValidationErrors);
+    
+    // If there are validation errors, return early
+    if (Object.values(newValidationErrors).some(error => error)) {
+      return;
+    }
     
     try {
       const response = await api.post('/leagues/create/', leagueData);
@@ -88,63 +127,143 @@ function LeagueCreate() {
       const newLeagueId = response.data._id;
       navigate(`/league/home?leagueid=${newLeagueId}`);
     } catch (err) {
-      setError('Error creating league. Please try again.');
-      console.error('Error creating league:', err);
+      if(err.status === 403) {
+        setError('Error: You can only join 10 leagues.');
+        console.error('Error: You can only join 10 leagues.', err);
+      }
+      else {
+        setError('Error creating league. Please try again.');
+        console.error('Error creating league:', err);
+      }
+    }
+  };
+
+  const handleDivClick = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const handlePlayerSelect = (number) => {
+    setLeagueData(prevState => ({
+      ...prevState,
+      number_of_players: number
+    }));
+    // Clear validation error when user selects a number
+    if (validationErrors.number_of_players) {
+      setValidationErrors(prev => ({
+        ...prev,
+        number_of_players: false
+      }));
     }
   };
 
   return (
-    <div className="w-1/3 mx-auto">
+    <div className="w-full max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="h-52"></div>
-        <form onSubmit={handleFormSubmit} className="bg-slate-100 shadow-md rounded-xl px-8 pt-6 pb-8 mb-4">
-        <h2 className="text-3xl font-bold mb-6 text-center">Create League</h2>
-          <div className="mb-4" key='name'>
-            <label htmlFor='name' className="block text-gray-700 text-sm font-bold mb-2">Name</label>
-            <input 
-              type='name' 
-              id='name' 
-              name='name' 
-              onChange={handleInputChange} 
-              value={leagueData['name']} 
-              placeholder="Enter League Name"
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-              required
-            />
-          </div>
-          <div className="mb-6" key='number_of_players'>
-            <label htmlFor='number_of_players' className="block text-gray-700 text-sm font-bold mb-2">Number Of Players</label>
-            <input 
-              type='number_of_players' 
-              id='number_of_players' 
-              name='number_of_players' 
-              onChange={handleInputChange} 
-              placeholder="Enter Number of Players"
-              value={leagueData['number_of_players']} 
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-              required
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <button type='submit' className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-              Create League
-            </button>
-          </div>
-        </form>
+      <form onSubmit={handleFormSubmit} className="bg-white shadow-md rounded-xl px-4 sm:px-8 pt-6 pb-8 mb-4">
+        <h1 className="h-12 text-3xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+          Create a League
+        </h1>
+        <h2 className="text-gray-600 text-base sm:text-lg font-medium mb-6 sm:mb-8 text-center">
+          Use the Invite ID on the League's home page to invite friends!
+        </h2>
         
-        {error && <p className="text-red-600 mt-4">{error}</p>}
-        {success && <p className="text-green-600 mt-4">League created successfully!</p>}
-      </div>
+        <div className="mb-4">
+          <div 
+            className={`flex items-center bg-gray-100 border rounded-xl px-2 py-1 cursor-text ${
+              (validationErrors.name || validationErrors.nameLength)
+                ? 'border-red-500' 
+                : 'border-gray-300 focus-within:border-blue-500'
+            }`}
+            onClick={handleDivClick}
+          >
+            <span className="material-symbols-outlined text-gray-500 mr-2">trophy</span>
+            <div className="w-full">
+              <label 
+                htmlFor="name" 
+                className="block text-sm font-semibold text-gray-500 w-24"
+                onClick={(e) => e.stopPropagation()}
+              >
+                League Name
+              </label>
+              <input 
+                ref={inputRef}
+                type="text"
+                id="name"
+                name="name"
+                onChange={handleInputChange}
+                value={leagueData.name}
+                placeholder="Enter League Name"
+                className="bg-transparent focus:outline-none w-full text-gray-700 py-1 text-sm sm:text-base"
+                maxLength={48}
+              />
+            </div>
+            {(validationErrors.name || validationErrors.nameLength) && (
+              <span className="material-symbols-outlined !text-red-600">error</span>
+            )}
+          </div>
+          {validationErrors.nameLength && (
+            <div className='flex mt-1 text-sm sm:text-base'>
+              <span className="material-symbols-outlined !text-red-600">error</span>
+              <p className="ml-1 text-red-600">League name must be less than 48 characters</p>
+            </div>
+          )}
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-semibold text-gray-500 mb-2">Number of Teams</label>
+          <div className="grid grid-cols-5 gap-2">
+            {[2, 4, 6, 8, 10, 12, 14, 16, 18, 20].map(number => (
+              <button
+                key={number}
+                type="button"
+                onClick={() => handlePlayerSelect(number)}
+                className={`py-2 px-2 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
+                  leagueData.number_of_players === number
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-blue-100'
+                }`}
+              >
+                {number}
+              </button>
+            ))}
+          </div>
+          {validationErrors.number_of_players && (
+            <div className='flex mt-4 text-sm sm:text-base'>
+              <span className="material-symbols-outlined !text-red-600">error</span>
+              <p className="ml-1 text-red-600">Select a Team Count</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-center sm:justify-start mt-4">
+          <button 
+            type="submit" 
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold p-3 rounded-lg shadow-lg text-sm sm:text-md flex justify-center items-center transition-all"
+          >
+            Create League
+          </button>
+        </div>
+        
+        {error && 
+          <div className='flex mt-4 text-sm sm:text-base'>
+            <span className="material-symbols-outlined !text-red-600">error</span>
+            <p className="ml-1 text-red-600">{error}</p>
+          </div>
+        }
+        {success && <p className="text-green-600 mt-4 text-sm sm:text-base">League created successfully!</p>}
+      </form>
+    </div>
   );
-}
+};
 
 function LeagueHome() {
   const [league, setLeague] = useState(null);
   const [commissioner, setCommissioner] = useState(null);
-  const [userTeam, setUserTeam] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [copiedId, setCopiedId] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [copiedStates, setCopiedStates] = useState({});
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -178,7 +297,11 @@ function LeagueHome() {
         const leagueData = leagueResponse.data;
         const userData = userResponse.data;
 
-        setCurrentUser(userData);
+        const draftResponse = await api.get(`/drafts/${leagueData.draft}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      
+        const draftStatus = draftResponse.data.status;
 
         // Check if the user is a member of the league
         const userTeams = userData.teams || [];
@@ -211,10 +334,7 @@ function LeagueHome() {
         });
         const commissionerData = commissionerResponse.data;
 
-        const userTeam = teamsWithData.find(team => team.owner === userData._id);
-        setUserTeam(userTeam);
-
-        setLeague({ ...leagueData, teams: teamsWithData });
+        setLeague({ ...leagueData, teams: teamsWithData, draftStatus: draftStatus });
         setCommissioner(commissionerData);
         setLoading(false);
       } catch (error) {
@@ -231,83 +351,151 @@ function LeagueHome() {
     fetchLeagueData();
   }, [navigate, location]);
 
-  const copyLeagueId = (leagueId) => {
-    navigator.clipboard.writeText(leagueId).then(() => {
-      setCopiedId(leagueId);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
+  const copyToClipboard = (text, leagueId) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        // Set copied state for this specific league
+        setCopiedStates(prev => ({ ...prev, [leagueId]: true }));
+        
+        // Reset after 1 second
+        setTimeout(() => {
+          setCopiedStates(prev => ({ ...prev, [leagueId]: false }));
+        }, 1000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy text: ', err);
+      });
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
     return <div className="text-red-600">{error}</div>;
   }
 
-  const isCommissioner = currentUser && league && currentUser._id === league.commissioner;
-
   return (
-    <div className="w-3/4 mx-auto mt-8">
-      <LeagueNavbar />
-      <div className='h-16'></div>
-      <div className='flex justify-center items-center gap-2'>
-        <div className=' justify-center items-center w-2/5 '>
-          <div className="bg-gray-100 p-4 rounded-lg mb-2 h-[300px] shadow">
-            <h1 className="text-4xl font-bold mb-4">{league.name}</h1>
-            <h1 className="text-base text-gray-500 mb-2">Commissioner: {commissioner ? commissioner.username : 'Loading...'}</h1>
-            <div className="relative">
-                <p className="text-sm text-gray-500 mb-2">
-                  League ID: 
-                  <span 
-                    className="ml-2 bg-gray-200 px-2 py-1 rounded cursor-pointer"
-                    onMouseEnter={(e) => e.target.textContent = league._id}
-                    onMouseLeave={(e) => e.target.textContent = "*******"}
-                    onClick={() => copyLeagueId(league._id)}
-                  >
-                    *******
+    <div className="flex justify-center items-center mt-8 md:mt-4 px-4 sm:px-6 md:pl-36 lg:px-8">
+      <div className="relative my-12 h-fit w-full max-w-3xl bg-gray-50 rounded-2xl">
+        <div className="h-40 sm:h-52 w-full bg-gradient-to-r from-green-200 to-emerald-300 rounded-t-2xl shadow-md" />
+        <div className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 h-32 w-32 sm:h-40 sm:w-40 bg-white rounded-full flex items-center justify-center shadow-lg">
+          <span className="material-symbols-outlined !text-[60px] sm:!text-[80px]">trophy</span>
+        </div>
+        <div className="px-4 sm:px-6 lg:px-8 pb-6 pt-16 sm:pt-24 h-fit w-full rounded-b-2xl shadow-lg text-center">
+          <h1 className="text-lg sm:text-xl font-bold mb-4">{league.name}</h1>
+          
+          {/* League Info */}
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <h1 className="text-base sm:text-lg text-gray-500">Players: </h1>
+              <h1 className="text-base sm:text-lg">{league.teams.length}/{league.number_of_players}</h1>
+            </div>
+            
+            <div className="flex justify-between items-center mb-2">
+              <h1 className="text-base sm:text-lg text-gray-500">Invite ID: </h1>
+              <div className="relative">
+                <span 
+                  className="text-xs sm:text-sm bg-gray-200 px-2 py-1 rounded cursor-pointer flex items-center gap-1 hover:bg-gray-300 transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    copyToClipboard(league._id, league._id);
+                  }}
+                >
+                  {window.innerWidth < 640 ? `${league._id.slice(0, 7)}...` : league._id.slice(0, 25)}
+                  <span className="material-symbols-outlined text-base !text-[15px]">
+                    {copiedStates[league._id] ? 'check' : 'content_copy'}
                   </span>
-                </p>
-                {copiedId === league._id && (
-                  <span className="absolute right-0 top-0 text-green-500 text-sm">Copied!</span>
+                </span>
+                {copiedStates[league._id] && (
+                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+                    Copied!
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+                  </div>
                 )}
+              </div>
             </div>
-            <h1 className="text-base text-gray-500 mb-2">Players: {league.teams.length}/{league.number_of_players}</h1>
-            {error && <p className="text-red-500 mt-2">{error}</p>}
+
+            <div className="flex justify-between items-center mb-2">
+              <h1 className="text-base sm:text-lg text-gray-500">Draft Status: </h1>
+              <div className={`inline-block rounded-full px-2 sm:px-3 py-1 ${
+                league.draftStatus === "completed" 
+                  ? "bg-green-100 text-green-800"
+                  : league.draftStatus === "started" || league.draftStatus === "waiting"
+                  ? "bg-red-100 text-red-800"
+                  : "bg-yellow-100 text-yellow-800"
+              }`}>
+                <div className="text-xs sm:text-sm font-medium">
+                  {league.draftStatus === "completed" 
+                    ? "Drafted" 
+                    : league.draftStatus === "started" || league.draftStatus === "waiting"
+                    ? "Drafting!"
+                    : "Pending"}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-2">
+              <h1 className="text-base sm:text-lg text-gray-500">Commissioner: </h1>
+              <h1 className="text-base sm:text-lg">{commissioner.username}</h1>
+            </div>
           </div>
-          <div className='space-y-2 bg-gray-100 shadow rounded-lg p-4 h-[100px] flex justify-between items-center'>
-            <div>
-              <h2 className="text-xl font-semibold mb-2">My Team:</h2>
-              <p className="p-1 mt-0 text-gray-500">{userTeam ? userTeam.name : 'Loading...'}</p>
-            </div>
+
+          {/* Teams Section */}
+          <div className="flex flex-col items-center justify-center">
+            <h1 className="text-lg sm:text-xl font-bold mt-4">Teams</h1>
+            {league.teams.map(cteam => (
+              <Link 
+                to={`/league/team?leagueid=${league._id}&teamid=${cteam._id}`} 
+                key={cteam._id} 
+                className="h-auto flex items-center justify-between bg-white hover:bg-gray-50 p-3 m-2 w-full sm:w-4/5 shadow rounded-xl"
+              >
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-left text-base sm:text-lg truncate max-w">{cteam.name}</h1>
+                  <h1 className="text-left text-gray-500 text-xs sm:text-sm truncate max-w">{cteam.ownerData.username}</h1>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm sm:text-base">{cteam.wins} - {cteam.losses}</span>
+                  <span className="material-symbols-outlined">chevron_right</span>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
-      <ul className="bg-gray-100 shadow rounded-lg p-4 w-1/5 h-[408px]">
-        <h2 className="text-xl font-semibold mb-2">Teams in this league:</h2>
-        {league.teams.map(team => (
-          <li key={team._id} className="p-1 mt-0 text-gray-500">
-            <span className="m-0">{team.name}</span></li>
-        ))}
-      </ul>
       </div>
     </div>
   );
 }
 
-function LeagueJoin() {
+const LeagueJoin = () => {
+  const [joinData, setJoinData] = useState({
+    league_id: '',
+    team_name: ''
+  });
   const [userData, setUserData] = useState(null);
-  const [leagueId, setLeagueId] = useState('');
-  const [teamName, setTeamName] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({
+    league_id: false,
+    team_name: false,
+    teamNameLength: false
+  });
+  const inputRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const fetchUserData = async () => {
       const token = tokenUtil.getToken();
       if (!token) {
-        navigate('/user/login');
+        navigate('/user/login', { state: { from: location.pathname } });
         return;
       }
 
@@ -321,94 +509,189 @@ function LeagueJoin() {
         setError('Error fetching user data. Please try again.');
         if (error.response && error.response.status === 401) {
           tokenUtil.removeToken();
-          navigate('/user/login');
+          navigate('/user/login', { state: { from: location.pathname } });
         }
       }
     };
-
     fetchUserData();
-  }, [navigate]);
-  
-  const handleJoinLeague = async (e) => {
-    e.preventDefault();
+  }, [navigate, location]);
+
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+    setJoinData(prevState => ({
+      ...prevState,
+      [name]: value
+    }));
+    // Clear validation errors when user starts typing
+    if (validationErrors[name] || validationErrors.teamNameLength) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: false,
+        teamNameLength: false
+      }));
+    }
+  };
+
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
     setError('');
-    setLoading(true);
-
+    setSuccess(false);
+    
+    // Validation
+    const newValidationErrors = {
+      league_id: !joinData.league_id.trim(),
+      team_name: !joinData.team_name.trim(),
+      teamNameLength: joinData.team_name.trim().length > 48
+    };
+    
+    setValidationErrors(newValidationErrors);
+    
+    // If there are validation errors, return early
+    if (Object.values(newValidationErrors).some(error => error)) {
+      return;
+    }
+    
     try {
-      const token = tokenUtil.getToken();
-      if (!token) {
-        navigate('/user/login', { state: { from: '/league/join' } });
-        return;
-      }
-
-      const joinData = {
+      const joinPayload = {
         user_id: userData._id,
-        league_id: leagueId,
-        team_name: teamName
+        league_id: joinData.league_id,
+        team_name: joinData.team_name
       };
 
-      const response = await api.post('/leagues/join/', joinData, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await api.post('/leagues/join/', joinPayload);
+      setSuccess(true);
+      setJoinData({
+        league_id: '',
+        team_name: ''
       });
+      
+      navigate(`/league/home?leagueid=${response.data._id}`);
+    } catch (err) {
+      if(err.status === 403) {
+        setError(err.response.data.detail);
+        console.error('Error: You can only join 10 leagues.', err);
+      }
+      else {
+        setError('Error joining league. Please try again.');
+        console.error('Error joining league:', err);
+      }
+    }
+  };
 
-      // Assuming the API returns the updated league data
-      const updatedLeague = response.data;
-      navigate(`/league/home?leagueid=${updatedLeague._id}`);
-    } catch (error) {
-      console.error('Error joining league:', error);
-      setError('Error joining league. Please check the ID and try again.');
-    } finally {
-      setLoading(false);
+  const handleDivClick = (inputId) => {
+    if (inputRef.current && inputRef.current.id === inputId) {
+      inputRef.current.focus();
     }
   };
 
   return (
-    <div className="w-1/3 mx-auto">
+    <div className="w-full max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="h-52"></div>
-      <form onSubmit={handleJoinLeague} className="bg-slate-100 shadow-md rounded-xl px-8 pt-6 pb-8 mb-4">
-        <h1 className="text-3xl font-bold mb-6 text-center">Join a League</h1>
+      <form onSubmit={handleFormSubmit} className="bg-white shadow-md rounded-xl px-4 sm:px-8 pt-6 pb-8 mb-4">
+        <h1 className="h-12 text-3xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+          Join a League
+        </h1>
+        <h2 className="text-gray-600 text-base sm:text-lg font-medium mb-6 sm:mb-8 text-center">
+          Use the Invite ID from the League's home page to join!
+        </h2>
+        
         <div className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="leagueId">
-            League ID
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            id="leagueId"
-            type="text"
-            placeholder="Enter League ID"
-            value={leagueId}
-            onChange={(e) => setLeagueId(e.target.value)}
-            required
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="teamName">
-            Team Name
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            id="teamName"
-            type="text"
-            placeholder="Enter Your Team Name"
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            type="submit"
-            disabled={loading}
+          <div 
+            className={`flex items-center bg-gray-100 border rounded-xl px-2 py-1 cursor-text ${
+              validationErrors.league_id 
+                ? 'border-red-500' 
+                : 'border-gray-300 focus-within:border-blue-500'
+            }`}
+            onClick={() => handleDivClick('league_id')}
           >
-            {loading ? 'Joining...' : 'Join League'}
+            <span className="material-symbols-outlined text-gray-500 mr-2">key</span>
+            <div className="w-full">
+              <label 
+                htmlFor="league_id" 
+                className="block text-sm font-semibold text-gray-500 w-24"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Invite ID
+              </label>
+              <input 
+                ref={inputRef}
+                type="text"
+                id="league_id"
+                name="league_id"
+                onChange={handleInputChange}
+                value={joinData.league_id}
+                placeholder="Enter League Invite ID"
+                className="bg-transparent focus:outline-none w-full text-gray-700 py-1 text-sm sm:text-base"
+                maxLength={48}
+              />
+            </div>
+            {validationErrors.league_id && (
+              <span className="material-symbols-outlined !text-red-600">error</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="mb-4">
+          <div 
+            className={`flex items-center bg-gray-100 border rounded-xl px-2 py-1 cursor-text ${
+              (validationErrors.team_name || validationErrors.teamNameLength)
+                ? 'border-red-500' 
+                : 'border-gray-300 focus-within:border-blue-500'
+            }`}
+            onClick={() => handleDivClick('team_name')}
+          >
+            <span className="material-symbols-outlined text-gray-500 mr-2">groups</span>
+            <div className="w-full">
+              <label 
+                htmlFor="team_name" 
+                className="block text-sm font-semibold text-gray-500 w-24"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Team Name
+              </label>
+              <input 
+                type="text"
+                id="team_name"
+                name="team_name"
+                onChange={handleInputChange}
+                value={joinData.team_name}
+                placeholder="Enter Your Team Name"
+                className="bg-transparent focus:outline-none w-full text-gray-700 py-1 text-sm sm:text-base"
+                maxLength={48}
+              />
+            </div>
+            {(validationErrors.team_name || validationErrors.teamNameLength) && (
+              <span className="material-symbols-outlined !text-red-600">error</span>
+            )}
+          </div>
+          {validationErrors.teamNameLength && (
+            <div className='flex mt-1 text-sm sm:text-base'>
+              <span className="material-symbols-outlined !text-red-600">error</span>
+              <p className="ml-1 text-red-600">Team name must be less than 48 characters</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-center sm:justify-start mt-4">
+          <button 
+            type="submit" 
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold p-3 rounded-lg shadow-lg text-sm sm:text-md flex justify-center items-center transition-all"
+          >
+            Join League
           </button>
         </div>
+        
+        {error && 
+          <div className='flex mt-4 text-sm sm:text-base'>
+            <span className="material-symbols-outlined !text-red-600">error</span>
+            <p className="ml-1 text-red-600">{error}</p>
+          </div>
+        }
+        {success && <p className="text-green-600 mt-4 text-sm sm:text-base">Successfully joined league!</p>}
       </form>
-      {error && <p className="text-red-500 text-xs italic">{error}</p>}
     </div>
   );
-}
+};
 
 function LeaguePlayers() {
   const [players, setPlayers] = useState([]);
@@ -421,6 +704,8 @@ function LeaguePlayers() {
   const [leagueId, setLeagueId] = useState(null);
   const [draftingPlayer, setDraftingPlayer] = useState(null);
   const [positionFilter, setPositionFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('');
   const [nameFilter, setNameFilter] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [draftError, setDraftError] = useState('');
@@ -453,33 +738,27 @@ function LeaguePlayers() {
 
       try {
         const [playersResponse, userResponse, leagueResponse] = await Promise.all([
-          api.get(`/nfl-players-paginated/`, {
+          api.get(`/nfl-players-paginated/${leagueIdParam}`, {
             headers: { Authorization: `Bearer ${token}` },
             params: { 
               page: currentPage, 
               limit: playersPerPage,
               position: positionFilter || undefined,
-              name: nameFilter || undefined
+              name: nameFilter || undefined,
+              available_in_league: statusFilter ? leagueIdParam : undefined || undefined
             }
-          }),
+          }, { headers: { Authorization: `Bearer ${token}` } }),
           api.get('/users/me/', { headers: { Authorization: `Bearer ${token}` } }),
-          api.get(`/leagues/${leagueIdParam}`, { headers: { Authorization: `Bearer ${token}` } })
+          api.get(`/leagues/${leagueIdParam}`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        const playersData = playersResponse.data.slice(0, -1);
-        setTotalPages(parseInt(playersResponse.data[playersData.length]["name"]));
+        const draftResponse = await api.get(`/drafts/${leagueResponse.data.draft}`, { headers: { Authorization: `Bearer ${token}` } });
+        setDraftStatus(draftResponse.data.status);
+
+        setTotalPages(parseInt(playersResponse.data.total_pages));
         setWeekIndex(parseInt(leagueResponse.data["week"]) - 1);
 
-        // Check availability for each player
-        const playersWithAvailability = await Promise.all(playersData.map(async (player) => {
-          const availabilityResponse = await api.get(`/leagues/${leagueIdParam}/players/${player._id}/available`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          console.log(player);
-          return { ...player, isAvailable: availabilityResponse.data };
-        }));
-
-        setPlayers(playersWithAvailability);
+        setPlayers(playersResponse.data.players);
 
         const userTeamId = leagueResponse.data.teams.find(teamId => 
           userResponse.data.teams.includes(teamId)
@@ -506,7 +785,7 @@ function LeaguePlayers() {
     };
 
     fetchData();
-  }, [currentPage, location, navigate, positionFilter, nameFilter]);
+  }, [currentPage, location, navigate, positionFilter, nameFilter, statusFilter]);
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
@@ -514,6 +793,11 @@ function LeaguePlayers() {
 
   const handlePositionFilterChange = (value) => {
     setPositionFilter(value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(!statusFilter);
     setCurrentPage(1);
   };
 
@@ -546,13 +830,13 @@ function LeaguePlayers() {
     const token = tokenUtil.getToken();
 
     try {
-      await api.post(`/leagues/${leagueId}/teams/${userTeam._id}/draft`, 
+      await api.post(`/leagues/${leagueId}/teams/${userTeam._id}/waiver`, 
         { player_id: playerId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       setPlayers(players.map(player => 
-        player._id === playerId ? { ...player, isAvailable: false } : player
+        player._id === playerId ? { ...player, taken: true } : player
       ));
       setActionSuccess(`Player has been added.`);
       setTimeout(() => setActionSuccess(''), 3000);
@@ -571,7 +855,14 @@ function LeaguePlayers() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+          <p className="mt-4 text-gray-600">Loading Waivers...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
@@ -579,41 +870,19 @@ function LeaguePlayers() {
   }
 
   return (
-    <div>
-      <LeagueNavbar />
-      <div className="flex justify-center items-center gap-2 mb-2">
-        <input 
-          type='name' 
-          id='name' 
-          name='name' 
-          value={nameFilter} 
-          onChange={handleNameSearchChange} 
-          placeholder="Search..."
-          className="shadow appearance-none border rounded w-1/2 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" 
-        />
-        {positions.map((position) => {
-          const styles = getPositionStyles(position.value);
-          return (
-            <button
-              key={position.value}
-              onClick={() => handlePositionFilterChange(position.value)}
-              className={`
-                w-12 h-12 flex items-center justify-center text-sm font-medium
-                border rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
-                ${positionFilter === position.value 
-                  ? styles.activeBg
-                  : `${styles.bg} ${styles.hoverBg}`}
-                ${styles.text}
-              `}
-            >
-              {position.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className='w-full max-w-screen-2xl mx-auto md:pl-36 mt-16 md:mt-4 mb-8"'>
+      <FilterDropdown
+        positions={positions}
+        nameFilter={nameFilter}
+        positionFilter={positionFilter}
+        statusFilter={statusFilter}
+        onNameFilterChange={handleNameSearchChange}
+        onPositionFilterChange={handlePositionFilterChange}
+        onStatusFilterChange={handleStatusFilterChange}
+      />
 
       {draftError && (
-        <div className="mx-auto w-1/5 fixed top-12 left-0 right-0 bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3 z-50" role="alert">
+        <div className="mx-auto w-96 fixed top-12 left-0 right-0 bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3 z-50" role="alert">
           <div className="mx-auto flex items-center justify-between">
             <div>
               <strong className="font-bold">Error: </strong>
@@ -630,7 +899,7 @@ function LeaguePlayers() {
       )}
 
       {actionSuccess && (
-        <div className="mx-auto w-1/5 fixed top-12 left-0 right-0 bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3 z-50" role="alert">
+        <div className="mx-auto w-96 fixed top-12 left-0 right-0 bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3 z-50" role="alert">
           <div className="mx-auto flex items-center justify-between">
             <div>
               <strong className="font-bold">Success: </strong>
@@ -646,13 +915,13 @@ function LeaguePlayers() {
         </div>
       )}
 
-      <div className="relative bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="relative bg-white shadow sm:rounded-lg max-h-[calc(80vh)] overflow-y-auto sticky top-0">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th scope="col" className="pl-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+              <th scope="col" className="pl-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
               <th scope="col" className="px-2 py-3 w-1/6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Player</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">Position</th>
+              <th scope="col" className="w-24 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">Position</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opponent</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proj</th>
@@ -660,21 +929,37 @@ function LeaguePlayers() {
               <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200">
+            {players.length === 0 && (
+              <tr>
+                <td colSpan="8" className="h-24 text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined">filter_list</span>
+                    <span>No Players Fit these Parameters</span>
+                  </div>
+                </td>
+              </tr>
+            )}
             {players.map((player) => (
-              <tr key={player._id}>
+              <tr key={player._id} className="even:bg-gray-50 odd:bg-white">
                 <td className="whitespace-nowrap">
-                  <div className="flex pl-6">
-                    {player && player.team && (
+                  <div className="flex pl-2">
+                    {player && player.team && player.team !== "FA" ? (
                       <img 
                         src={`https://a.espncdn.com/i/teamlogos/nfl/500/${player.team.toLowerCase()}.png`}
                         alt={`${player.team} logo`}
                         className="w-10 h-10 object-contain opacity-90"
                       />
-                    )}
+                    ) : player && player.team === "FA" ? (
+                      <img 
+                        src={`https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`}
+                        alt="NFL logo"
+                        className="w-10 h-10 object-contain opacity-90"
+                      />
+                    ) : null}
                   </div>
                 </td>
-                <td className="px-6 py-2 whitespace-nowrap">
+                <td className="px-2 py-2 whitespace-nowrap">
                   <div className="flex items-center">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
@@ -687,7 +972,7 @@ function LeaguePlayers() {
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-3 whitespace-nowrap border-r">
+                <td className="w-24 px-3 py-3 whitespace-nowrap border-r">
                   <div className={`inline-block rounded-full px-3 py-1 ${getPositionStyles(player.position).bg} ${getPositionStyles(player.position).text}`}>
                     <div className="text-sm font-medium">{player.position}</div>
                   </div>
@@ -705,11 +990,13 @@ function LeaguePlayers() {
                   <div className="text-sm text-gray-700">{(player.weeks[weekIndex] ? player.weeks[weekIndex].toFixed(1) : "-")}</div>
                 </td>
                 <td className="px-6 whitespace-nowrap text-center">
-                  {player.isAvailable ? (
+                  {draftStatus !== "completed" ? (
+                    <span className="text-sm text-gray-600">Wait for Draft</span> 
+                  ) : !player.taken ? (
                     <button
                       onClick={() => handleDraftPlayer(player._id)}
                       disabled={draftingPlayer === player._id}
-                      className="px-4 py-1 border border-transparent text-sm font-medium rounded-full text-white bg-blue-600 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      className="px-4 py-1 border border-transparent text-sm font-medium rounded-full text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
                       {draftingPlayer === player._id ? 'Adding...' : 'Add Player'}
                     </button>
@@ -753,6 +1040,61 @@ function LeaguePlayers() {
   );
 }
 
+const WeekSelector = ({ selectedWeek, totalWeeks, currentWeek, onChange }) => {
+  const handlePrevWeek = () => {
+    if (selectedWeek > 1) {
+      onChange(selectedWeek - 1);
+    }
+  };
+
+  const handleNextWeek = () => {
+    if (selectedWeek < totalWeeks) {
+      onChange(selectedWeek + 1);
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2">
+      <button
+        onClick={handlePrevWeek}
+        disabled={selectedWeek <= 1}
+        className={`flex justify-center items-center p-1 rounded-full hover:bg-gray-100 transition-colors ${
+          selectedWeek <= 1 ? 'text-gray-300' : 'text-gray-600'
+        }`}
+        aria-label="Previous week"
+      >
+        <span class="material-symbols-outlined"> chevron_left </span>
+      </button>
+      
+      <div className="relative">
+        <div className="flex items-center bg-white border border-gray-200 rounded-lg shadow-sm px-4 py-2">
+          <div className="flex flex-col items-center">
+            <span className="text-sm font-medium text-gray-900">
+              Week {selectedWeek}
+            </span>
+            {selectedWeek === currentWeek && (
+              <span className="text-xs text-blue-600 font-medium">
+                Current Week
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={handleNextWeek}
+        disabled={selectedWeek >= totalWeeks}
+        className={`flex justify-center items-center p-1 rounded-full hover:bg-gray-100 transition-colors ${
+          selectedWeek >= totalWeeks ? 'text-gray-300' : 'text-gray-600'
+        }`}
+        aria-label="Next week"
+      >
+        <span class="material-symbols-outlined"> chevron_right </span>
+      </button>
+    </div>
+  );
+};
+
 function LeagueScoreboard() {
   const [league, setLeague] = useState(null);
   const [matchups, setMatchups] = useState([]);
@@ -763,6 +1105,7 @@ function LeagueScoreboard() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Data fetching effects remain the same...
   useEffect(() => {
     const fetchLeagueData = async () => {
       const token = localStorage.getItem('token');
@@ -785,9 +1128,18 @@ function LeagueScoreboard() {
           headers: { Authorization: `Bearer ${token}` }
         });
         setLeague(leagueResponse.data);
-        setSelectedWeek(leagueResponse.data.week || 1);
+        var index = 19 - leagueResponse.data.schedule.length;
+        var weekIndex = leagueResponse.data.week - index;
+        if(weekIndex < 0) weekIndex = 0;
+        setSelectedWeek(weekIndex + 1);
       } catch (error) {
-        handleError(error);
+        setLoading(false);
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/user/login', { state: { from: location.pathname } });
+        } else {
+          setError('An error occurred while fetching data');
+        }
       }
     };
 
@@ -826,99 +1178,168 @@ function LeagueScoreboard() {
         setTeams(teamsData);
         setLoading(false);
       } catch (error) {
-        handleError(error);
+        setLoading(false);
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/user/login', { state: { from: location.pathname } });
+        } else {
+          setError('An error occurred while fetching data');
+        }
       }
     };
 
     fetchWeekData();
-  }, [league, selectedWeek]);
+  }, [league, selectedWeek, navigate, location]);
 
-  const handleError = (error) => {
-    setLoading(false);
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      navigate('/user/login', { state: { from: location.pathname } });
-    } else {
-      setError('An error occurred while fetching data');
+  const getTeamStyle = (matchup, teamId) => {
+    if (matchup.status !== 'completed' || !matchup.winner || matchup.winner === 'BYE') {
+      return 'text-gray-700';
     }
+    return matchup.winner === teamId ? 'text-gray-700 font-bold' : 'text-gray-400';
   };
 
-  const renderMatchup = (matchup) => {
-    if (!matchup) return null;
-    const teamA = teams[matchup.team_a];
-    const teamB = teams[matchup.team_b];
-    return (
-      <div key={matchup._id} className="border px-4 py-4 m-4 rounded-lg">
-        <div className="flex justify-between items-center">
-          <div className='text-gray-500'>
-            {matchup.team_a_score.toFixed(2)}
-          </div>
-          <div className="flex-1 text-right">
-            {teamA ? `${teamA.name} (${teamA.wins}-${teamA.losses})` : 'BYE'}
-          </div>
-          <div className="mx-4 text-gray-500">
-              vs
-          </div>
-          <div className="flex-1 text-left">
-            {teamB ? `${teamB.name} (${teamB.wins}-${teamB.losses})` : 'BYE'}
-          </div>
-          <div className='text-gray-500'>
-            {matchup.team_b_score.toFixed(2)}
-          </div>
-        </div>
-        {matchup.status === 'completed' && (
-          <div className="text-center mt-2">
-            Winner: {matchup.winner ? teams[matchup.winner].name : 'BYE'}
-          </div>
-        )}
-        <div className="text-center mt-2">
-          <Link to={`/league/matchup?leagueid=${league._id}&matchupid=${matchup._id}`} className="text-blue-500 hover:text-blue-700">
-            <span className="material-symbols-outlined">open_in_new</span>
-          </Link>
-        </div>
-      </div>
-    );
+  const getScoreStyle = (matchup) => {
+    if (matchup.status !== 'completed' || !matchup.winner || matchup.winner === 'BYE') {
+      return 'text-gray-500';
+    }
+    return 'font-bold text-gray-700';
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+          <p className="mt-4 text-gray-600">Loading Scoreboard...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-600">{error}</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-red-600 text-center px-4">{error}</div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-3/5 mx-auto mt-8">
-      <LeagueNavbar />
-      <div className='bg-white p-8 rounded-xl'>
-        <div className='flex items-center'>
-          <h1 className="text-3xl font-bold mb-8 pr-2">Scoreboard</h1>
-          <h1 className='mb-6 pl-2'>{league.name}</h1>
-        </div>
-        <div className="mb-6">
-          <select
-            id="week-select"
-            value={selectedWeek}
-            onChange={(e) => setSelectedWeek(Number(e.target.value))}
-            className="block w-1/4 p-2 border rounded"
-          >
-            {league.schedule.map((_, index) => (
-              <option key={index} value={index + 1}>
-                Week {index + 1}{index + 1 === league.current_week ? ' (Current)' : ''}
-              </option>
-            ))}
-          </select>
+    <div className="mt-12 md:mt-4 w-full max-w-6xl mx-auto lg:pl-36 md:pl-36 px-2 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+      <div className="bg-white shadow-lg rounded-lg p-3 sm:p-4 lg:p-6">
+        {/* Header Section - Enhanced responsiveness */}
+        <div className="flex justify-between items-center border-b pb-4 mb-4">
+          <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+              Scoreboard
+            </h1>
+            <h2 className="text-base sm:text-lg lg:text-xl text-gray-600 font-medium sm:ml-2">
+              {league.name}
+            </h2>
+          </div>
+          <div className="w-auto">
+            <WeekSelector
+              selectedWeek={selectedWeek}
+              totalWeeks={league.schedule.length}
+              currentWeek={league.current_week}
+              onChange={setSelectedWeek}
+            />
+          </div>
         </div>
 
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className=" rounded-t-lg bg-gray-50 border border-gray-200 px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-500">
-              Week {selectedWeek} Matchups
-            </h3>
-          </div>
-          <div className="border-t border-gray-200 px-4 py-5 sm:p-0">
-            {matchups.map(renderMatchup)}
+        {/* Matchups Section - Enhanced grid layout */}
+        <div>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-600 mb-3 sm:mb-4">
+            Week {selectedWeek} Matchups
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+            {matchups.map((matchup) => (
+              <div
+                key={matchup._id}
+                className="bg-gray-50 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 p-3 sm:p-4"
+              >
+                {/* Matchup Card Content */}
+                <div className="flex items-stretch sm:items-center gap-3 sm:gap-4">
+                  {/* Team A */}
+                  <div className="flex-1">
+                    <div className="flex justify-between flex-col items-start">
+                      <p className={`${getTeamStyle(matchup, matchup.team_a)} text-sm sm:text-base font-medium truncate max-w-[100px] sm:max-w-[125px]`}>
+                        {teams[matchup.team_a]?.name || 'BYE'}
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-500 sm:mt-1">
+                        {teams[matchup.team_a]?.wins}W - {teams[matchup.team_a]?.losses}L
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Score */}
+                  <div className={`flex items-center justify-center ${getScoreStyle(matchup)} text-sm sm:text-base min-w-[100px]`}>
+                    <span className={`${getTeamStyle(matchup, matchup.team_a)}`}>
+                      {matchup.team_a_score.toFixed(2)}
+                    </span>
+                    <span className="mx-2">-</span>
+                    <span className={`${getTeamStyle(matchup, matchup.team_b)}`}>
+                      {matchup.team_b_score.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Team B */}
+                  <div className="flex-1">
+                    <div className="flex justify-between flex-col items-end">
+                      <p className={`${getTeamStyle(matchup, matchup.team_b)} text-sm sm:text-base font-medium truncate max-w-[100px] sm:max-w-[125px]`}>
+                        {teams[matchup.team_b]?.name || 'BYE'}
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-500 sm:mt-1">
+                        {teams[matchup.team_b]?.wins}W - {teams[matchup.team_b]?.losses}L
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status and Winner Indicators */}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="w-8 flex justify-center">
+                    {matchup.winner === matchup.team_a && (
+                      <span className="material-symbols-outlined text-gray-600">arrow_drop_up</span>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 flex justify-center">
+                    <div className={`py-1 px-3 rounded-full text-center ${
+                      matchup.status === "started"
+                        ? "bg-red-100 text-red-800"
+                        : matchup.status === "completed"
+                        ? "bg-gray-100 text-gray-800"
+                        : "bg-green-100 text-green-800"
+                    }`}>
+                      <span className="text-xs whitespace-nowrap">
+                        {matchup.status === "started"
+                          ? "Lineups Locked"
+                          : matchup.status === "completed"
+                          ? "Matchup Completed"
+                          : "Lineups Unlocked"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-8 flex justify-center">
+                    {matchup.winner === matchup.team_b && (
+                      <span className="material-symbols-outlined text-gray-600">arrow_drop_up</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* View Matchup Link */}
+                <div className="mt-3 text-center">
+                  <Link
+                    to={`/league/matchup?leagueid=${league._id}&matchupid=${matchup._id}`}
+                    className="inline-block py-2 px-4 text-sm text-blue-500 hover:text-blue-600 hover:underline font-medium"
+                  >
+                    View Matchup
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -928,8 +1349,13 @@ function LeagueScoreboard() {
 
 function LeagueMatchup() {
   const [matchup, setMatchup] = useState(null);
+  const [matchupStatus, setMatchupStatus] = useState('');
+  const [week, setWeek] = useState(1);
   const [teamA, setTeamA] = useState(null);
   const [teamB, setTeamB] = useState(null);
+  const [winner, setWinner] = useState('');
+  const [teamAName, setTeamAName] = useState('');
+  const [teamBName, setTeamBName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -957,31 +1383,31 @@ function LeagueMatchup() {
           headers: { Authorization: `Bearer ${token}` }
         });
         setMatchup(matchupResponse.data);
+        setWeek(matchupResponse.data.week);
+        setMatchupStatus(matchupResponse.data.status);
+        if (matchupResponse.data.winner === matchupResponse.data.team_a) {
+          setWinner('a');
+        }
+        else if (matchupResponse.data.winner === matchupResponse.data.team_b) {
+          setWinner('b');
+        }
 
-        const [teamAResponse, teamBResponse] = await Promise.all([
+        const [teamAResponse, teamBResponse, rosterData] = await Promise.all([
           api.get(`/teams/${matchupResponse.data.team_a}`, {
             headers: { Authorization: `Bearer ${token}` }
           }),
           api.get(`/teams/${matchupResponse.data.team_b}`, {
             headers: { Authorization: `Bearer ${token}` }
+          }),
+          api.get(`/matchups/rosters/${matchupId}`, {
+            headers: { Authorization: `Bearer ${token}` }
           })
         ]);
+        setTeamAName(teamAResponse.data.name);
+        setTeamBName(teamBResponse.data.name);
 
-        const fetchPlayerData = async (team) => {
-          const playerPromises = team.roster.map(playerId =>
-            playerId ? api.get(`/nfl-players/${playerId}`, { headers: { Authorization: `Bearer ${token}` } }) : null
-          );
-          const playerResponses = await Promise.all(playerPromises);
-          return playerResponses.map(response => response ? response.data : null);
-        };
-
-        const [teamAPlayerData, teamBPlayerData] = await Promise.all([
-          fetchPlayerData(teamAResponse.data),
-          fetchPlayerData(teamBResponse.data)
-        ]);
-
-        setTeamA({ ...teamAResponse.data, roster: teamAPlayerData });
-        setTeamB({ ...teamBResponse.data, roster: teamBPlayerData });
+        setTeamA(rosterData.data.team_a_roster);
+        setTeamB(rosterData.data.team_b_roster);
         
         setLoading(false);
       } catch (error) {
@@ -998,7 +1424,19 @@ function LeagueMatchup() {
     fetchMatchupData();
   }, [navigate, location]);
 
-  if (loading) return <div>Loading...</div>;
+  function formatName(fullName) {
+    const firstSpace = fullName.indexOf(' ');
+    return fullName[0] + '. ' + fullName.slice(firstSpace + 1);
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+        <p className="mt-4 text-gray-600">Loading Matchup...</p>
+      </div>
+    </div>
+  );
   if (error) return <div className="text-red-600">{error}</div>;
   if (!matchup || !teamA || !teamB) return <div>No data available</div>;
 
@@ -1012,7 +1450,7 @@ function LeagueMatchup() {
   };
 
   const calculateTotalPoints = (team) => {
-    return team.roster.reduce((total, player) => total + (player?.points || 0), 0);
+    return team.slice(0, 9).reduce((total, player) => total + (player?.weeks[week - 1] || 0), 0);
   };
 
   const teamATotal = calculateTotalPoints(teamA);
@@ -1020,23 +1458,74 @@ function LeagueMatchup() {
 
   const renderPlayerRow = (playerA, playerB, index) => {
     const position = getPositionForIndex(index);
+    const isAlternate = index % 2 === 1;
     
     return (
-      <tr key={index}>
-        <td className="w-1/4 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-          {playerA ? playerA.name : 'Empty'}
+      <tr key={index} className={isAlternate ? 'bg-gray-50' : 'bg-white'}>
+        <td className="w-1/4 px-2 sm:px-3 py-1 whitespace-nowrap">
+          <div className="flex items-center lg:space-x-3">
+            <div className="hidden lg:block flex-shrink-0 w-10 h-10">
+              {playerA && playerA.team && (
+                <img 
+                  src={playerA.team !== "FA" 
+                    ? `https://a.espncdn.com/i/teamlogos/nfl/500/${playerA.team.toLowerCase()}.png`
+                    : `https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`
+                  }
+                  alt={`${playerA.team !== "FA" ? playerA.team : "NFL"} logo`}
+                  className="w-10 h-10 object-contain opacity-90"
+                />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {playerA ? formatName(playerA.name) : "None"}
+                  {playerA && playerA.injury_status && (
+                    <span className="text-red-600 ml-1">{playerA.injury_status}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500">{playerA ? `${playerA.position} - ${playerA.team}` : "-"}</div>
+                <div className="text-xs text-gray-500">{playerA ? `vs ${playerA.opponent}` : "-"}</div>
+              </div>
+            </div>
+          </div>
         </td>
-        <td className="w-1/5 px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-          {playerA ? (playerA.points || 0).toFixed(2) : '-'}
+        <td className="w-16 sm:w-1/5 px-1.5 sm:px-6 py-1 whitespace-nowrap text-sm text-gray-500 text-right">
+          {playerA ? (playerA.weeks[week - 1] || 0).toFixed(1) : '-'}
         </td>
-        <td className="w-24 px-6 py-4 whitespace-nowrap text-sm text-gray-500 border-x text-center font-bold bg-gray-50">
+        <td className="w-12 px-0 py-1 whitespace-nowrap text-sm text-gray-500 text-center border-x font-bold bg-gray-50">
           {position}
         </td>
-        <td className="w-1/5 px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-left">
-          {playerB ? (playerB.points || 0).toFixed(2) : '-'}
+        <td className="w-16 sm:w-1/5 px-1.5 sm:px-6 py-1 whitespace-nowrap text-sm text-gray-500 text-left">
+          {playerB ? (playerB.weeks[week - 1] || 0).toFixed(1) : '-'}
         </td>
-        <td className="w-1/4 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
-          {playerB ? playerB.name : 'Empty'}
+        <td className="w-1/4 px-2 sm:px-3 py-1 whitespace-nowrap">
+          <div className="flex items-center justify-end lg:space-x-3">
+            <div className="flex-1 min-w-0 text-right">
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {playerB ? formatName(playerB.name) : "None"}
+                  {playerB && playerB.injury_status && (
+                    <span className="text-red-600 ml-1">{playerB.injury_status}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500">{playerB ? `${playerB.position} - ${playerB.team}` : "-"}</div>
+                <div className="text-xs text-gray-500">{playerB ? `vs ${playerB.opponent}` : "-"}</div>
+              </div>
+            </div>
+            <div className="hidden lg:block flex-shrink-0 w-10 h-10">
+              {playerB && playerB.team && (
+                <img 
+                  src={playerB.team !== "FA" 
+                    ? `https://a.espncdn.com/i/teamlogos/nfl/500/${playerB.team.toLowerCase()}.png`
+                    : `https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`
+                  }
+                  alt={`${playerB.team !== "FA" ? playerB.team : "NFL"} logo`}
+                  className="w-10 h-10 object-contain opacity-90"
+                />
+              )}
+            </div>
+          </div>
         </td>
       </tr>
     );
@@ -1046,13 +1535,13 @@ function LeagueMatchup() {
     <tr className="bg-gray-50">
       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-md font-bold text-gray-900 text-right">
+      <td className="pr-6 py-4 whitespace-nowrap text-md font-bold text-gray-900 text-right">
         {teamATotal.toFixed(2)}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-md text-gray-500 text-center">
+      <td className="w-12 py-4 whitespace-nowrap text-xs md:text-sm text-gray-500 text-center">
         TOTAL
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-md font-bold text-gray-900 text-left">
+      <td className="pl-6 py-4 whitespace-nowrap text-md font-bold text-gray-900 text-left">
         {teamBTotal.toFixed(2)}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
@@ -1061,33 +1550,118 @@ function LeagueMatchup() {
   );
 
   return (
-    <div className="w-1/2 mx-auto mt-8">
-      <LeagueNavbar />
-      <div className='bg-white p-8 rounded-xl'>
-        <h1 className="text-3xl font-bold mb-8">Matchup Details</h1>
-        
-        <div className="flex justify-center items-center mb-8">
-          <div className="w-1/3">
-            <h2 className="text-2xl font-semibold">{teamA.name}</h2>
-            <p className="text-xl">{matchup.team_a_score.toFixed(2)} pts</p>
+    <div className="mt-12 md:mt-4 w-full max-w-6xl mx-auto lg:pl-36 md:pl-36 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+      <div className='bg-white sm:p-4 sm:rounded-xl'>
+        <div className="flex justify-center items-center mb-3 divide-x">
+          <div className="w-1/2 flex flex-col lg:flex-row justify-between items-start lg:items-center pt-2 sm:pt-none pl-2 sm:pl-none">
+            {winner === 'a' ? (
+              <div className='flex items-center'>
+                <div className='hidden lg:flex w-12 h-12 mr-2 justify-center items-center rounded-xl bg-green-100'>
+                  <span className='material-symbols-outlined !text-[25px] text-green-800'>trophy</span>
+                </div>
+                <div className='max-w-[150px] sm:max-w-[225px] xl:max-w-[250px] truncate'>
+                  <Link 
+                    to={`/league/team?leagueid=${matchup.league}&teamid=${matchup.team_a}`}
+                    className="text-md sm:text-lg md:text-2xl font-semibold text-right hover:text-blue-500"
+                  >{teamAName}</Link>
+                </div>
+              </div> ) : (
+              <div className='flex items-center'>
+                <div className='hidden lg:flex w-12 h-12 mr-2 justify-center items-center rounded-xl bg-gray-100'>
+                  <span className='material-symbols-outlined !text-[25px] text-gray-800'>trophy</span>
+                </div>
+                <div className="max-w-[150px] sm:max-w-[225px] xl:max-w-[250px] truncate">
+                  <Link 
+                    to={`/league/team?leagueid=${matchup.league}&teamid=${matchup.team_a}`}
+                    className="text-md sm:text-lg md:text-2xl font-semibold text-right hover:text-blue-500"
+                  >{teamAName}</Link>
+                </div>
+              </div>
+            )}
+            {winner === 'a' ? ( 
+              <div className='w-full flex items-center justify-between lg:justify-end'>
+                <p className="text-md md:text-xl text-right ">{teamATotal.toFixed(2)} pts</p>
+                <span className="material-symbols-outlined text-left"> arrow_left </span>
+              </div>
+            ) : (
+              <div>
+                <p className="mr-5 text-md md:text-xl text-right text-gray-400">{teamATotal.toFixed(2)} pts</p>
+              </div>
+            )}
           </div>
-          <div className="text-3xl text-center font-bold w-1/3">VS</div>
-          <div className="text-right w-1/3">
-            <h2 className="text-2xl font-semibold">{teamB.name}</h2>
-            <p className="text-xl">{matchup.team_b_score.toFixed(2)} pts</p>
+
+          <div className="w-1/2 flex flex-col-reverse lg:flex-row justify-between items-end lg:items-center pt-2 sm:pt-none pr-2 sm:pr-none">
+            {winner === 'b' ? ( 
+              <div className='w-full flex items-center justify-between lg:justify-start'>
+                <span className="material-symbols-outlined text-left"> arrow_right </span>
+                <p className="text-md md:text-xl text-right ">{teamBTotal.toFixed(2)} pts</p>
+              </div>
+            ) : (
+              <div className='flex items-center'>
+                <p className="ml-5 text-md md:text-xl text-right text-gray-400">{teamBTotal.toFixed(2)} pts</p>
+              </div>
+            )}
+            {winner === 'b' ? (
+              <div className='flex items-center'>
+                <div className='max-w-[150px] sm:max-w-[225px] xl:max-w-[250px] truncate'>
+                <Link 
+                    to={`/league/team?leagueid=${matchup.league}&teamid=${matchup.team_b}`}
+                    className="text-md sm:text-lg md:text-2xl font-semibold text-right hover:text-blue-500"
+                  >{teamBName}</Link>
+                </div>
+                <div className='hidden lg:flex w-12 h-12 ml-2 justify-center items-center rounded-xl bg-green-100'>
+                  <span className='material-symbols-outlined !text-[25px] text-green-800'>trophy</span>
+                </div>
+              </div> ) : (
+              <div className='flex items-center'>
+                <div className='max-w-[150px] sm:max-w-[225px] xl:max-w-[250px] truncate'>
+                <Link 
+                    to={`/league/team?leagueid=${matchup.league}&teamid=${matchup.team_b}`}
+                    className="text-md sm:text-lg md:text-2xl font-semibold text-right hover:text-blue-500"
+                  >{teamBName}</Link>
+                </div>
+                <div className='hidden lg:flex w-12 h-12 ml-2 justify-center items-center rounded-xl bg-gray-100'>
+                  <span className='material-symbols-outlined !text-[25px] text-gray-800'>trophy</span>
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+
+        <div className='mb-3'>
+          {matchupStatus === "started" ? (
+            <div className="h-8 flex justify-center items-center">
+              <div className='flex justify-center items-center h-full w-36 bg-red-100 rounded-2xl'>
+                <span className="material-symbols-outlined text-red-800 text-xs"> lock </span>
+                <p className='text-xs text-red-800 font-bold'>Lineups Locked</p>
+              </div>
+            </div>
+          ) : matchupStatus === "completed" ? (
+            <div className="h-8 flex justify-center items-center">
+              <div className='flex justify-center items-center h-full w-36 bg-gray-100 rounded-2xl'>
+                <p className='text-xs text-gray-800 font-bold'>Matchup Completed</p>
+              </div>
+            </div>
+          ) : (
+            <div className="h-8 flex justify-center items-center">
+              <div className='flex justify-center items-center h-full w-36 bg-green-100 rounded-2xl'>
+                <span className="material-symbols-outlined text-green-800 text-xs"> lock_open </span>
+                <p className='text-xs text-green-800 font-bold'>Lineups Unlocked</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
           <tbody className="bg-white divide-y divide-gray-200">
-            {teamA.roster.slice(0, 9).map((playerA, index) => 
-              renderPlayerRow(playerA, teamB.roster[index], index)
+            {teamA.slice(0, 9).map((playerA, index) => 
+              renderPlayerRow(playerA, teamB[index], index)
             )}
             
             {renderTotalRow()}
 
-            {teamA.roster.slice(9).map((playerA, index) => 
-              renderPlayerRow(playerA, teamB.roster[index + 9], index + 9)
+            {teamA.slice(9).map((playerA, index) => 
+              renderPlayerRow(playerA, teamB[index + 9], index + 9)
             )}
           </tbody>
         </table>
@@ -1135,7 +1709,6 @@ function LeagueStandings() {
         const teamResponses = await Promise.all(teamPromises);
         const teamsData = teamResponses.map(response => response.data);
 
-        // Calculate win percentage and sort teams
         const sortedTeams = teamsData
           .map(team => ({
             ...team,
@@ -1160,211 +1733,84 @@ function LeagueStandings() {
   }, [navigate, location]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center p-4">
+          <span className="material-symbols-outlined text-4xl md:text-6xl animate-spin text-blue-500">
+            progress_activity
+          </span>
+          <p className="mt-4 text-gray-600">Loading Standings...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-600">{error}</div>;
+    return <div className="text-red-600 p-4 text-center">{error}</div>;
   }
 
   return (
-    <div className="w-3/5 mx-auto mt-8">
-      <LeagueNavbar />
-      <div className='bg-white p-8 rounded-xl'>
-        <div className='flex items-center'>
-          <h1 className="text-3xl font-bold mb-8 pr-2">Standings</h1>
-          <h1 className='mb-6 pl-2'>{league.name}</h1>
+    <div className="w-full max-w-6xl mx-auto md:pl-36 mt-16 md:mt-4">
+      <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-sm">
+        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-2 mb-6">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+            Standings
+          </h1>
+          <h2 className="text-lg sm:text-xl text-gray-600 font-medium">
+            {league.name}
+          </h2>
         </div>
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-200">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rank
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Team
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Wins
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Losses
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Win %
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {teams.map((team, index) => (
-                <tr key={team._id} className={index % 2 === 0 ? 'bg-[#fdfdfd]' : 'bg-[#fbfbfc]'}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{team.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {team.wins}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {team.losses}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {(team.winPercentage).toFixed(3)}
-                  </td>
+
+        <div className="overflow-x-auto">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="text-center w-16 sm:w-20 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Rank
+                  </th>
+                  <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Team
+                  </th>
+                  <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    W
+                  </th>
+                  <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    L
+                  </th>
+                  <th scope="col" className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Win%
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LeagueTeams() {
-  const [league, setLeague] = useState(null);
-  const [teams, setTeams] = useState([]);
-  const [expandedTeam, setExpandedTeam] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const location = useLocation();
-  const expandedContentRef = useRef(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const token = tokenUtil.getToken();
-      if (!token) {
-        navigate('/user/login', { state: { from: location.pathname } });
-        return;
-      }
-
-      const searchParams = new URLSearchParams(location.search);
-      const leagueId = searchParams.get('leagueid');
-
-      if (!leagueId) {
-        setError('League ID not provided');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const leagueResponse = await api.get(`/leagues/${leagueId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setLeague(leagueResponse.data);
-
-        const teamPromises = leagueResponse.data.teams.map(teamId =>
-          api.get(`/teams/${teamId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-        );
-        const teamResponses = await Promise.all(teamPromises);
-        const teamsData = await Promise.all(teamResponses.map(async (response) => {
-          const team = response.data;
-          const rosterPromises = team.roster.map(playerId =>
-            api.get(`/nfl-players/${playerId}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            })
-          );
-          const rosterResponses = await Promise.all(rosterPromises);
-          const roster = rosterResponses.map(r => r.data);
-
-          // Fetch team owner information
-          const ownerResponse = await api.get(`/users/${team.owner}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const ownerName = ownerResponse.data.name;
-
-          return { ...team, roster, ownerName };
-        }));
-
-        setTeams(teamsData);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Error fetching data. Please try again.');
-        setLoading(false);
-        if (error.response && error.response.status === 401) {
-          tokenUtil.removeToken();
-          navigate('/user/login', { state: { from: location.pathname } });
-        }
-      }
-    };
-
-    fetchData();
-  }, [navigate, location]);
-
-  const toggleTeamExpansion = (teamId) => {
-    setExpandedTeam(expandedTeam === teamId ? null : teamId);
-  };
-
-  useEffect(() => {
-    if (expandedContentRef.current) {
-      expandedContentRef.current.style.height = expandedTeam
-        ? `${expandedContentRef.current.scrollHeight}px`
-        : '0px';
-    }
-  }, [expandedTeam]);
-
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
-
-  return (
-    <div className="w-1/2 mx-auto my-8">
-      <LeagueNavbar />
-      <div className='bg-white p-8 rounded-xl'>
-        <div className='flex items-center'>
-          <h1 className="text-3xl font-bold mb-8 pr-2">Teams</h1>
-          <h1 className='mb-6 pl-2'>{league.name}</h1>
-        </div>
-        
-        <div className="">
-          {teams.map((team) => (
-            <div key={team._id} className="bg-white border border-gray-300 mb-4 rounded-xl">
-              <div 
-                className="flex justify-between items-center p-4 cursor-pointer"
-                onClick={() => toggleTeamExpansion(team._id)}
-              >
-                <div>
-                  <h2 className="text-base font-semibold">{team.name}</h2>
-                  <h2 className='text-sm font-medium text-gray-500'>W/L: {team.wins}-{team.losses}</h2>
-                  <h3 className='text-sm font-medium text-gray-500'>Owner: {team.ownerName}</h3>
-                </div>
-                {expandedTeam === team._id ? <span className="material-symbols-outlined">remove</span> : <span className="material-symbols-outlined">add</span>}
-              </div>
-              
-              <div 
-                ref={expandedTeam === team._id ? expandedContentRef : null}
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  expandedTeam === team._id ? 'max-h-[1000px]' : 'max-h-0'
-                }`}
-              >
-                <div className="p-4 border-t">
-                  <h3 className="font-semibold mb-2">Roster</h3>
-                  <ul className="space-y-2 mb-12">
-                    {team.roster.slice(0, 9).map((player) => (
-                      <li key={player._id} className="flex justify-between">
-                        <span>{player.name}</span>
-                        <span className="text-gray-500">{player.position}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <ul className="space-y-2">
-                    {team.roster.slice(9).map((player) => (
-                      <li key={player._id} className="flex justify-between">
-                        <span>{player.name}</span>
-                        <span className="text-gray-500">{player.position}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          ))}
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {teams.map((team, index) => (
+                  <tr key={team._id} className={index % 2 === 0 ? 'bg-gray-100' : 'bg-gray-50'}>
+                    <td className="text-center py-2 text-sm text-gray-500 border-r">
+                      <span>{index + 1}</span>
+                    </td>
+                    <td className="truncate max-w-[200px] sm:max-w-[300px] px-2 sm:px-6 py-2 whitespace-nowrap">
+                      <Link 
+                        to={`/league/team?leagueid=${league._id}&teamid=${team._id}`}
+                        className="text-sm font-medium text-blue-500 hover:text-blue-700"
+                      >
+                        {team.name}
+                      </Link>
+                    </td>
+                    <td className="px-2 sm:px-6 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {team.wins}
+                    </td>
+                    <td className="px-2 sm:px-6 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {team.losses}
+                    </td>
+                    <td className="px-2 sm:px-6 py-2 whitespace-nowrap text-sm text-gray-500">
+                      {(team.winPercentage).toFixed(3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1386,6 +1832,7 @@ function LeagueMyTeam() {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [swapError, setSwapError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [currentMatchup, setCurrentMatchup] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -1419,16 +1866,28 @@ function LeagueMyTeam() {
         setCurrentUser(currentResponse.data);
         setWeekIndex(parseInt(leagueResponse.data["week"]) - 1);
 
+        // Fetch current matchup
+        var index = 19 - leagueResponse.data.schedule.length;
+        var weekIndex = leagueResponse.data.week - index;
+        const currentWeekMatchups = leagueResponse.data.schedule[weekIndex] || [];
+        const matchupPromises = currentWeekMatchups.map(matchupId =>
+          api.get(`/matchup/${matchupId}`, { headers: { Authorization: `Bearer ${token}` } })
+        );
+        const matchupResponses = await Promise.all(matchupPromises);
+        const teamMatchup = matchupResponses.find(response => {
+          const matchup = response.data;
+          return matchup.team_a === teamId || matchup.team_b === teamId;
+        });
+        if (teamMatchup) {
+          setCurrentMatchup(teamMatchup.data);
+        }
+
         const ownerResponse = await api.get(`/users/${teamResponse.data.owner}`, { headers: { Authorization: `Bearer ${token}` } });
         setTeamOwner(ownerResponse.data);
 
-        const playerPromises = teamResponse.data.roster.map(playerId =>
-          playerId ? api.get(`/nfl-players/${playerId}`, { headers: { Authorization: `Bearer ${token}` } }) : null
-        );
-        const playerResponses = await Promise.all(playerPromises);
-        const rosterData = playerResponses.map(response => response ? response.data : null);
+        const rosterResponse = await api.get(`/teams/roster/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
 
-        setRoster(rosterData);
+        setRoster(rosterResponse.data);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -1502,6 +1961,43 @@ function LeagueMyTeam() {
     }
   };
 
+  const isValidMove = (fromIndex, toIndex) => {
+    const sourcePlayer = roster[fromIndex];
+    const targetPlayer = roster[toIndex];
+    
+    if (!sourcePlayer) return false;
+    
+    const sourcePosition = sourcePlayer.position;
+    const validSlots = [];
+    
+    // Add all valid positions for the source player
+    if (VALID_ROSTER_SLOTS[sourcePosition]) {
+      validSlots.push(...VALID_ROSTER_SLOTS[sourcePosition]);
+    }
+    // Add bench slots as valid positions
+    validSlots.push(...VALID_ROSTER_SLOTS["BENCH"]);
+    
+    // Check if target position is valid for source player
+    if (!validSlots.includes(toIndex)) {
+      return false;
+    }
+    
+    // If target slot has a player, check if source slot is valid for target player
+    if (targetPlayer) {
+      const targetValidSlots = [];
+      if (VALID_ROSTER_SLOTS[targetPlayer.position]) {
+        targetValidSlots.push(...VALID_ROSTER_SLOTS[targetPlayer.position]);
+      }
+      targetValidSlots.push(...VALID_ROSTER_SLOTS["BENCH"]);
+      
+      if (!targetValidSlots.includes(fromIndex)) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
   const renderMoveButton = (index) => {
     if (!isEditing) return null;
 
@@ -1515,10 +2011,8 @@ function LeagueMyTeam() {
           onClick={() => setSelectedPlayer(index)}
           className="ml-2"
         >
-          <div className='h-8 w-8 flex justify-center items-center bg-blue-300 hover:bg-blue-400 rounded-full'>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 bg-blue-500 text-white rounded-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
+          <div className='h-8 w-8 flex justify-center items-center hover:bg-blue-200 rounded-full'>
+            <span className="material-symbols-outlined !text-blue-400"> swap_horiz </span>
           </div>
         </button>
       );
@@ -1528,23 +2022,23 @@ function LeagueMyTeam() {
           onClick={() => setSelectedPlayer(null)}
           className="ml-2"
         >
-          <div className='h-8 w-8 flex justify-center items-center bg-gray-300 hover:bg-gray-400 rounded-full'>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 bg-gray-500 text-white rounded-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <div className='h-8 w-8 flex justify-center items-center hover:bg-gray-200 rounded-full'>
+            <span className="material-symbols-outlined !text-gray-400"> close </span>
           </div>
         </button>
       );
     } else {
+      // Only show the green checkmark if the move is valid
+      const isValid = isValidMove(selectedPlayer, index);
+      if (!isValid) return <div className='ml-2 h-8 w-8'></div>;
+
       return (
         <button
           onClick={() => handleMovePlayer(selectedPlayer, index)}
           className="ml-2"
         >
-          <div className='h-8 w-8 flex justify-center items-center bg-green-300 hover:bg-green-400 rounded-full'>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 bg-green-500 text-white rounded-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+          <div className='h-8 w-8 flex justify-center items-center hover:bg-green-200 rounded-full'>
+            <span className="material-symbols-outlined !text-green-400"> done_outline </span>
           </div>
         </button>
       );
@@ -1559,16 +2053,24 @@ function LeagueMyTeam() {
             onClick={() => openRemoveModal(player, index)}
             className="mr-2"
           >
-            <div className='h-8 w-8 flex justify-center items-center bg-red-300 hover:bg-red-400 rounded-full'>
-              <svg xmlns="http://www.w3.org/2000/svg" className="bg-red-500 text-white rounded-full h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-              </svg>
+            <div className='h-8 w-8 flex justify-center items-center hover:bg-red-200 rounded-full'>
+              <span class="material-symbols-outlined !text-red-400"> delete </span>
             </div>
           </button>
         )}
         {renderMoveButton(index)}
       </div>
     );
+  };
+
+  const calculateStartersPoints = () => {
+    return roster
+      .slice(0, 9)
+      .reduce((sum, player) => {
+        const points = player?.weeks?.[weekIndex] || 0;
+        return sum + points;
+      }, 0)
+      .toFixed(1);
   };
 
   const toggleEditing = () => {
@@ -1582,24 +2084,29 @@ function LeagueMyTeam() {
     setShowModal(true);
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+        <p className="mt-4 text-gray-600">Loading Team...</p>
+      </div>
+    </div>
+  );
   if (error) return <div className="text-red-600">{error}</div>;
 
   return (
-    <div>
-      <LeagueNavbar />
-
+    <div className="w-full md:ml-36 md:w-11/12 md:w-4/5 mt-16 md:mt-4 mb-8">
       {/* Error Message */}
       {swapError && (
-        <div className="mx-auto w-1/5 fixed top-12 left-0 right-0 bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3 z-50" role="alert">
-          <div className="mx-auto flex items-center justify-between">
-            <div>
+        <div className="fixed top-12 left-0 right-0 mx-4 md:mx-auto md:w-96 bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3 z-50" role="alert">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
               <strong className="font-bold">Error: </strong>
               <span className="block sm:inline">{swapError}</span>
             </div>
             <button 
               onClick={() => setSwapError('')} 
-              className="text-red-700 hover:text-red-900 focus:outline-none"
+              className="ml-4 text-red-700 hover:text-red-900 focus:outline-none"
             >
               ×
             </button>
@@ -1609,15 +2116,15 @@ function LeagueMyTeam() {
 
       {/* Success Message */}
       {actionSuccess && (
-        <div className="mx-auto w-1/5 fixed top-12 left-0 right-0 bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3 z-50" role="alert">
-          <div className="mx-auto flex items-center justify-between">
-            <div>
+        <div className="fixed top-12 left-0 right-0 mx-4 md:mx-auto md:w-96 bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3 z-50" role="alert">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
               <strong className="font-bold">Success: </strong>
               <span className="block sm:inline">{actionSuccess}</span>
             </div>
             <button 
               onClick={() => setActionSuccess('')} 
-              className="text-green-700 hover:text-green-900 focus:outline-none"
+              className="ml-4 text-green-700 hover:text-green-900 focus:outline-none"
             >
               ×
             </button>
@@ -1626,116 +2133,179 @@ function LeagueMyTeam() {
       )}
 
       {/* Team Information */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-4">
-        <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-          <h3 className="text-3xl leading-6 font-medium text-gray-900">{team.name}</h3>
+      <div className="bg-white shadow sm:rounded-lg mb-4">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="truncate max-w text-xl md:text-3xl leading-6 font-medium text-gray-900">{team.name}</h3>
         </div>
-        <div className="h-12 flex items-center border-t border-gray-200 px-4 py-5 sm:p-0">
-            <h1 className="pl-6 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{team.wins} - {team.losses}</h1>
-            <h1 className="pl-8 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{league.name}</h1>
-            <h1 className="pl-8 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{teamOwner.name}</h1>
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-t border-gray-200 px-4 py-3">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-8">
+            <h1 className="text-sm text-gray-900">{team.wins} - {team.losses}</h1>
+            <h1 className="text-sm text-gray-900">{league.name}</h1>
+            <h1 className="text-sm text-gray-900">{teamOwner.name}</h1>
+          </div>
+          <div className="mt-2 md:mt-0">
+            {currentMatchup ? (
+              <Link 
+                to={`/league/matchup?leagueid=${league._id}&matchupid=${currentMatchup._id}`}
+                className="text-blue-500 hover:text-blue-700 underline"
+              >
+                View Your Week {weekIndex + 1} Matchup
+              </Link>
+            ) : (
+              <span className="text-gray-500">No Matchup This Week</span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Team Roster */}
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+        <div className="px-4 py-5 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Lineup</h3>
           {currentUser._id === team.owner && (
             <button 
               onClick={toggleEditing}
-              className={`px-4 py-2 rounded-xl ${
+              className={`px-4 py-2 rounded-xl w-full sm:w-auto ${
                 isEditing 
                   ? 'bg-green-400 text-white hover:bg-green-500' 
-                  : 'bg-[#eeeeee] text-black hover:bg-[#e5e5e5]'
+                  : 'bg-gray-100 text-black hover:bg-gray-200'
               }`}
             >
-              {isEditing ? <div className='flex items-center justify-center gap-1'><span className="material-symbols-outlined"> check </span><h1>Finish Editing</h1></div> : <div className='flex items-center justify-center gap-1'><span className="material-symbols-outlined"> edit </span><h1>Edit Team</h1></div>}
+              {isEditing ? (
+                <div className='flex items-center justify-center gap-1'>
+                  <span className="material-symbols-outlined">check</span>
+                  <span>Finish Editing</span>
+                </div>
+              ) : (
+                <div className='flex items-center justify-center gap-1'>
+                  <span className="material-symbols-outlined">edit</span>
+                  <span>Edit Team</span>
+                </div>
+              )}
             </button>
           )}
         </div>
-        <div className="border-t border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="w-20 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slot</th>
-                <th scope="col" className="w-16 px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Player</th>
-                <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-28 border-r">Actions</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opponent</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proj</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {roster.map((player, index) => (
-                <React.Fragment key={index}>
-                  {index === 9 && (
-                    <tr>
-                      <td colSpan="8" className="px-6 py-4 whitespace-nowrap bg-gray-100">
-                        <div className="text-sm font-medium text-gray-900">Bench</div>
+
+        {/* Responsive Table */}
+        <div className="border-t border-gray-200 overflow-x-auto">
+          <div className="min-w-full">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="w-12 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slot</th>
+                  <th scope="col" className="hidden md:table-cell w-16 px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                  <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Player</th>
+                  <th scope="col" className={`${isEditing ? 'table-cell' : 'hidden sm:table-cell'} px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-28 border-r`}>Actions</th>
+                  <th scope="col" className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Opponent</th>
+                  <th scope="col" className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proj</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {roster.map((player, index) => (
+                  <React.Fragment key={index}>
+                    {index === 9 && (
+                      <>
+                        <tr className="sm:hidden">
+                          <td colSpan={`${isEditing ? "4" : "3"}`} className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">Bench</div>
+                          </td>
+                          <td colSpan="1" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">{calculateStartersPoints()}</div>
+                          </td>
+                        </tr>
+                        <tr className="hidden md:hidden sm:table-row">
+                          <td colSpan="4" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">Bench</div>
+                          </td>
+                          <td colSpan="1" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">{calculateStartersPoints()}</div>
+                          </td>
+                        </tr>
+                        <tr tr className="hidden lg:hidden md:table-row">
+                          <td colSpan="6" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">Bench</div>
+                          </td>
+                          <td colSpan="1" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">{calculateStartersPoints()}</div>
+                          </td>
+                        </tr>
+                        <tr tr className="hidden lg:table-row">
+                          <td colSpan="7" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">Bench</div>
+                          </td>
+                          <td colSpan="1" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                            <div className="text-sm font-medium text-gray-900">{calculateStartersPoints()}</div>
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{getPositionForIndex(index)}</div>
+                      </td>
+                      <td className="hidden md:table-cell whitespace-nowrap">
+                        <div className="flex justify-center">
+                          {player && player.team && player.team !== "FA" ? (
+                            <img 
+                              src={`https://a.espncdn.com/i/teamlogos/nfl/500/${player.team.toLowerCase()}.png`}
+                              alt={`${player.team} logo`}
+                              className="w-8 h-8 md:w-10 md:h-10 object-contain opacity-90"
+                            />
+                          ) : player && player.team === "FA" ? (
+                            <img 
+                              src={`https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`}
+                              alt="NFL logo"
+                              className="w-8 h-8 md:w-10 md:h-10 object-contain opacity-90"
+                            />
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {player ? player.name : "None"}
+                              {player && player.injury_status && (
+                                <span className="text-red-600 ml-1">{player.injury_status}</span>
+                              )}
+                            </div>
+                            <div className="text-xs md:text-sm text-gray-500">{player ? `${player.position} - ${player.team}` : "-"}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={`${isEditing ? 'table-cell' : 'hidden sm:table-cell'}  px-3 py-2 whitespace-nowrap text-sm font-medium border-r`}>
+                        {renderActionButtons(player, index)}
+                      </td>
+                      <td className="hidden md:table-cell px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{player?.opponent || "-"}</div>
+                      </td>
+                      <td className="hidden lg:table-cell px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{player ? Number(player.total_points || 0).toFixed(1) : "-"}</div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{player ? player.projected_points.toFixed(2) : "-"}</div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">{player?.weeks?.[weekIndex] ? player.weeks[weekIndex].toFixed(1) : "-"}</div>
                       </td>
                     </tr>
-                  )}
-                  <tr>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{getPositionForIndex(index)}</div>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <div className="flex justify-center">
-                        {player && player.team && (
-                          <img 
-                            src={`https://a.espncdn.com/i/teamlogos/nfl/500/${player.team.toLowerCase()}.png`}
-                            alt={`${player.team} logo`}
-                            className="w-10 h-10 object-contain opacity-90"
-                          />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {player ? player.name : "None"}
-                            {player && player.injury_status && (
-                              <span className="text-red-600 ml-1">{player.injury_status}</span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500">{player ? `${player.position} - ${player.team}` : "-"}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-sm font-medium border-r">
-                      {renderActionButtons(player, index)}
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{player?.opponent || "-"}</div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{player ? Number(player.total_points || 0).toFixed(1) : "-"}</div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{player ? player.projected_points.toFixed(2) : "-"}</div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">{player?.weeks?.[weekIndex] ? player.weeks[weekIndex].toFixed(1) : "-"}</div>
-                    </td>
-                  </tr>
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Modal - Making it responsive */}
       {showModal && (
         <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="sm:flex sm:items-start">
                   <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
@@ -1753,14 +2323,14 @@ function LeagueMyTeam() {
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button
                   type="button"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3"
                   onClick={handleRemovePlayer}
                 >
                   Drop
                 </button>
                 <button
                   type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3"
                   onClick={() => setShowModal(false)}
                 >
                   Cancel
@@ -1774,11 +2344,73 @@ function LeagueMyTeam() {
   );
 }
 
+
 function LeagueLanding() {
   const [userLeagues, setUserLeagues] = useState([]);
+  const [username, setUserName] = useState('');
   const [error, setError] = useState('');
-  const [copiedId, setCopiedId] = useState(null);
+  const [copiedStates, setCopiedStates] = useState({});
   const navigate = useNavigate();
+
+  const fetchMatchupForLeague = async (league, userTeamId, token) => {
+    try {
+      // Calculate the current week's index in the schedule
+      var index = 19 - league.schedule.length;
+      var scheduleIndex = league.week - index;
+      if (scheduleIndex < 0 || !league.schedule[scheduleIndex]) {
+        return null;
+      }
+
+      // Get the current week's matchups
+      const currentWeekMatchups = league.schedule[scheduleIndex];
+      
+      // Fetch all matchups for the current week
+      const matchupPromises = currentWeekMatchups.map(matchupId =>
+        api.get(`/matchup/${matchupId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      );
+      
+      const matchupResponses = await Promise.all(matchupPromises);
+
+      // Find the matchup containing the user's team
+      const userMatchup = matchupResponses.find(response => {
+        const matchup = response.data;
+        return matchup.team_a === userTeamId || matchup.team_b === userTeamId;
+      });
+
+      if (!userMatchup) {
+        return null;
+      }
+
+      // Fetch both teams' information
+      const [teamAResponse, teamBResponse] = await Promise.all([
+        api.get(`/teams/${userMatchup.data.team_a}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        api.get(`/teams/${userMatchup.data.team_b}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      return {
+        matchupId: userMatchup.data._id,
+        teamA: {
+          id: teamAResponse.data._id,
+          name: teamAResponse.data.name,
+          score: userMatchup.data.team_a_score
+        },
+        teamB: {
+          id: teamBResponse.data._id,
+          name: teamBResponse.data.name,
+          score: userMatchup.data.team_b_score
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching matchup:', error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchUserDataAndLeagues = async () => {
@@ -1803,19 +2435,25 @@ function LeagueLanding() {
         const leaguesResponses = await Promise.all(leaguesPromises);
         const leaguesData = leaguesResponses.map(response => response.data);
 
-        // Fetch user's team for each league
-        const leaguesWithTeams = await Promise.all(leaguesData.map(async (league) => {
+        // Fetch user's team and matchup for each league
+        const leaguesWithTeamsAndMatchups = await Promise.all(leaguesData.map(async (league) => {
           const userTeam = league.teams.find(teamId => userResponse.data.teams.includes(teamId));
           if (userTeam) {
             const teamResponse = await api.get(`/teams/${userTeam}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
-            return { ...league, userTeam: teamResponse.data };
+            const matchup = await fetchMatchupForLeague(league, userTeam, token);
+            const draftResponse = await api.get(`/drafts/${league.draft}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+
+            return { ...league, userTeam: teamResponse.data, currentMatchup: matchup , draftStatus: draftResponse.data.status};
           }
           return league;
         }));
 
-        setUserLeagues(leaguesWithTeams);
+        setUserLeagues(leaguesWithTeamsAndMatchups);
+        setUserName(userResponse.data.username);
       } catch (error) {
         console.error('Error fetching user data and leagues:', error);
         setError('Error fetching user data and leagues. Please try again.');
@@ -1828,62 +2466,200 @@ function LeagueLanding() {
     fetchUserDataAndLeagues();
   }, [navigate]);
 
-  const copyLeagueId = (leagueId) => {
-    navigator.clipboard.writeText(leagueId).then(() => {
-      setCopiedId(leagueId);
-      setTimeout(() => setCopiedId(null), 2000);
-    });
+  const copyToClipboard = (text, leagueId) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedStates(prev => ({ ...prev, [leagueId]: true }));
+        setTimeout(() => {
+          setCopiedStates(prev => ({ ...prev, [leagueId]: false }));
+        }, 1000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy text: ', err);
+      });
   };
 
-  return(
-    <div className="container mx-auto px-4">
-      <div className='h-36'></div>
-      <div className='flex justify-center items-center gap-14 mb-12'>
-        <Link to={`/league/create`} className='h-28 w-56'>
-          <div className="bg-blue-500 hover:bg-blue-700 text-white text-2xl font-bold py-2 px-4 rounded-3xl focus:outline-none focus:shadow-outline h-full w-full flex justify-center items-center">
-            Create League
-          </div>
-        </Link>
-        <p className='text-4xl text-white'>---- OR ----</p>
-        <Link to={`/league/join`} className='h-28 w-56'>
-          <div className="bg-slate-500 hover:bg-slate-700 text-white text-2xl font-bold py-2 px-4 rounded-3xl focus:outline-none focus:shadow-outline h-full w-full flex justify-center items-center">
-            Join League
-          </div>
-        </Link>
-      </div>
+  const getTrophyColor = (teams) => {
+    const styles = {
+      2: { bg: 'bg-red-100', text: 'text-red-800' },
+      4: { bg: 'bg-orange-100', text: 'text-orange-800' },
+      6: { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+      8: { bg: 'bg-green-100', text: 'text-green-800' },
+      10: { bg: 'bg-teal-100', text: 'text-teal-800' },
+      12: { bg: 'bg-sky-100', text: 'text-sky-800' },
+      14: { bg: 'bg-blue-100', text: 'text-blue-800' },
+      16: { bg: 'bg-indigo-100', text: 'text-indigo-800' },
+      18: { bg: 'bg-violet-100', text: 'text-violet-800' },
+      20: { bg: 'bg-purple-100', text: 'text-purple-800' },
+    };
+    return styles[teams] || { bg: 'bg-pink-100', text: 'text-pink-800' };
+  };
 
-      <div className='mt-12 mb-8'>
-        <h1 className='text-3xl font-bold mb-6 text-center text-white'>Your Leagues</h1>
-        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {userLeagues.map((league) => (
-            <div key={league._id} className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-2">{league.name}</h2>
-              <p className="text-gray-600 mb-2">Your Team: {league.userTeam ? league.userTeam.name : 'N/A'}</p>
-              <div className="relative">
-                <p className="text-sm text-gray-500 mb-2">
-                  League ID: 
-                  <span 
-                    className="ml-2 bg-gray-200 px-2 py-1 rounded cursor-pointer"
-                    onMouseEnter={(e) => e.target.textContent = league._id}
-                    onMouseLeave={(e) => e.target.textContent = "*******"}
-                    onClick={() => copyLeagueId(league._id)}
-                  >
-                    *******
-                  </span>
-                </p>
-                {copiedId === league._id && (
-                  <span className="absolute right-0 top-0 text-green-500 text-sm">Copied!</span>
-                )}
+  return (
+    <div className="min-h-screen w-full px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Welcome Header */}
+        <h1 className="my-4 text-3xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+          Welcome {username}!
+        </h1>
+
+        {/* Create/Join League Section */}
+        <div className="mb-8 flex flex-col sm:flex-row justify-center items-center gap-6 sm:gap-10">
+          {/* Create League Card */}
+          <div className="w-full sm:w-auto flex flex-col items-center p-6 sm:p-8 bg-white/80 backdrop-blur-lg rounded-lg shadow-lg transition-transform hover:scale-105">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-4xl sm:text-5xl mb-4">🏆</div>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Create League</h1>
+              <p className="text-gray-600">Up to 20 Players</p>
+              <p className="text-gray-600">Customize Your League</p>
+            </div>
+            <Link to="/league/create" className="w-full sm:w-52 mt-6">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-3 rounded-lg shadow-lg text-lg flex justify-center items-center transition-all">
+                Create League
               </div>
+            </Link>
+          </div>
+
+          {/* Divider - visible only on larger screens */}
+          <div className="hidden sm:block w-[1px] h-60 bg-gradient-to-b from-gray-300 to-transparent" />
+
+          {/* Join League Card */}
+          <div className="w-full sm:w-auto flex flex-col items-center p-6 sm:p-8 bg-white/80 backdrop-blur-lg rounded-lg shadow-lg transition-transform hover:scale-105">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-4xl sm:text-5xl mb-4">🤝</div>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Join League</h1>
+              <p className="text-gray-600">Ask a friend for Invite ID</p>
+              <p className="text-gray-600">Jump into the Action!</p>
+            </div>
+            <Link to="/league/join" className="w-full sm:w-52 mt-6">
+              <div className="bg-gradient-to-r from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700 text-white font-bold py-3 rounded-lg shadow-lg text-lg flex justify-center items-center transition-all">
+                Join League
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Leagues Section */}
+        <div className="w-full md:pl-12">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600 mb-2">
+            You are in {userLeagues.length} leagues
+          </h1>
+          <h2 className="text-gray-600 text-lg sm:text-xl font-medium mb-8 text-center">
+            You can join or create up to 10!
+          </h2>
+          {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+          
+          {/* Leagues Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {userLeagues.map((league) => (
               <Link 
                 to={`/league/home?leagueid=${league._id}`}
-                className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                key={league._id} 
+                className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow"
               >
-                View League
+                {/* League Header */}
+                <div className="flex justify-left items-center mb-1">
+                  <div className={`w-12 h-12 mr-2 flex justify-center items-center rounded-xl ${getTrophyColor(league.number_of_players).bg}`}>
+                    <span className={`material-symbols-outlined !text-[25px] ${getTrophyColor(league.number_of_players).text}`}>trophy</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-left text-xl font-semibold truncate">{league.name}</h1>
+                    <p className="text-gray-500 truncate">Your Team: {league.userTeam ? league.userTeam.name : 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* Matchup Section */}
+                <div className="my-2 p-2 bg-gray-50 rounded-lg divide-y">
+                  <p className="text-sm font-medium text-gray-600">Week {league.week} Matchup:</p>
+                  <div className="pt-1">
+                    {league.currentMatchup ? (
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className={`text-sm truncate flex-1 ${league.currentMatchup.teamA.id === league.userTeam._id ? 'text-blue-400' : ''}`}>
+                            {league.currentMatchup.teamA.name}
+                          </span>
+                          <span className="text-sm text-gray-500 ml-2">{league.currentMatchup.teamA.score.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-sm truncate flex-1 ${league.currentMatchup.teamB.id === league.userTeam._id ? 'text-blue-400' : ''}`}>
+                            {league.currentMatchup.teamB.name}
+                          </span>
+                          <span className="text-sm text-gray-500 ml-2">{league.currentMatchup.teamB.score.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">No matches here this week!</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* League Info */}
+                <p className="text-gray-500 mb-2">Players: {league.teams.length}/{league.number_of_players}</p>
+                
+                {/* Draft Status */}
+                <div className="flex items-center gap-2 mb-1">
+                  {league.draftStatus === "completed" ? (
+                    <div className="inline-block rounded-full px-3 py-1 bg-green-100 text-green-800">
+                      <div className="text-sm font-medium">Drafted</div>
+                    </div>
+                  ) : league.draftStatus === "started" || league.draftStatus === "waiting" ? (
+                    <div className="inline-block rounded-full px-3 py-1 bg-red-100 text-red-800">
+                      <div className="text-sm font-medium">Drafting!</div>
+                    </div>
+                  ) : (
+                    <div className="inline-block rounded-full px-3 py-1 bg-yellow-100 text-yellow-800">
+                      <div className="text-sm font-medium">Pending</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Invite ID Section */}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-md text-gray-500">Invite ID:</span>
+                  <div className="relative">
+                    <span 
+                      className="text-sm bg-gray-200 px-2 py-1 rounded cursor-pointer flex items-center gap-1 hover:bg-gray-300 transition-colors"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        copyToClipboard(league._id, league._id);
+                      }}
+                    >
+                      {league._id.slice(0, 7)}...
+                      <span className="material-symbols-outlined text-base !text-[15px]">
+                        {copiedStates[league._id] ? 'check' : 'content_copy'}
+                      </span>
+                    </span>
+                    {copiedStates[league._id] && (
+                      <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+                        Copied!
+                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Navigation Links */}
+                <div className="mx-auto w-full h-[1px] bg-gray-200 mt-4" />
+                {league.currentMatchup ? (
+                  <div className="flex justify-evenly items-center">
+                    <Link to={`/league/team?leagueid=${league._id}&teamid=${league.userTeam._id}`} className="text-sm text-blue-500 mt-1 hover:text-blue-600">
+                      My Team
+                    </Link>
+                    <div className="w-[1px] h-4 bg-gray-200 mt-1" />
+                    <Link to={`/league/matchup?leagueid=${league._id}&matchupid=${league.currentMatchup.matchupId}`} className="text-sm text-blue-500 mt-1 hover:text-blue-600">
+                      Matchup
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="flex justify-center items-center">
+                    <Link to={`/league/team?leagueid=${league._id}&teamid=${league.userTeam._id}`} className="text-sm text-blue-500 mt-1 hover:text-blue-600">
+                      My Team
+                    </Link>
+                  </div>
+                )}
               </Link>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -1895,13 +2671,13 @@ function LeagueSettings() {
   const [userTeam, setUserTeam] = useState(null);
   const [leagueDraft, setLeagueDraft] = useState(null);
   const [newTeamName, setNewTeamName] = useState('');
-  const [newDraftDate, setNewDraftDate] = useState('');
-  const [newDraftTime, setNewDraftTime] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteAction, setDeleteAction] = useState('');
+  const [validationError, setValidationError] = useState(false);
+  const teamNameInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -1965,10 +2741,23 @@ function LeagueSettings() {
     fetchLeagueData();
   }, [navigate, location]);
 
+  const handleTeamNameChange = (e) => {
+    setNewTeamName(e.target.value);
+    if (validationError) {
+      setValidationError(false);
+    }
+  };
+
   const handleChangeTeamName = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    
+    if (!newTeamName.trim()) {
+      setValidationError(true);
+      return;
+    }
+
     const token = tokenUtil.getToken();
 
     try {
@@ -1985,26 +2774,9 @@ function LeagueSettings() {
     }
   };
 
-  const handleChangeDraftDateTime = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    const token = tokenUtil.getToken();
-
-    const newDateTime = `${newDraftDate}T${newDraftTime}:00.000Z`;
-
-    try {
-      const response = await api.post(`/drafts/${leagueDraft._id}/update-time`, 
-        { new_start_time: newDateTime },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setLeagueDraft(response.data);
-      setSuccess('Draft date and time updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (error) {
-      console.error('Error updating draft date and time:', error);
-      setError('Failed to update draft date and time. Please try again.');
-      setTimeout(() => setError(''), 3000);
+  const handleDivClick = () => {
+    if (teamNameInputRef.current) {
+      teamNameInputRef.current.focus();
     }
   };
 
@@ -2039,247 +2811,204 @@ function LeagueSettings() {
     const token = tokenUtil.getToken();
 
     try {
-      const response = await api.post(`/drafts/start/${leagueDraft._id}`, {}, {
+      const response = await api.post(`/drafts/wait/${leagueDraft._id}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setLeagueDraft(response.data);
-      setSuccess('You have started the draft successfully.');
+      setSuccess('You have started the draft process successfully.');
     } catch (error) {
       console.error('Error Starting:', error);
       setError(`Failed to start the draft. ${error.response?.data?.detail || 'Please try again.'}`);
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
-
   const isCommissioner = league && userTeam && league.commissioner === userTeam.owner;
 
-  const formatDraftDateTime = (dateTimeString) => {
-    const date = parseISO(dateTimeString);
-    return format(date, "MMMM d, yyyy 'at' h:mm a");
-  };
-
-  const generateTimeOptions = () => {
-    const options = [];
-    for (let i = 0; i < 24 * 4; i++) {
-      const time = addMinutes(new Date().setHours(0, 0, 0, 0), i * 15);
-      options.push(
-        <option key={i} value={format(time, 'HH:mm')}>
-          {format(time, 'h:mm a')}
-        </option>
-      );
-    }
-    return options;
-  };
+  if (loading) return (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+        <p className="mt-4 text-gray-600">Loading Settings...</p>
+      </div>
+    </div>
+  );
+  if (error) return <div className="text-red-600">{error}</div>;
 
   return (
-    <div className="w-2/5 mx-auto mt-8">
-      <LeagueNavbar />
-      <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 mt-8 divide-y">
-        <h2 className="text-2xl font-bold mb-4">League Settings</h2>
-        
+    <div className="max-w-2xl my-16 md:my-4 mx-auto md:pl-24">
+      <div className="bg-white shadow-md rounded-xl px-8 pt-6 pb-8 mb-4 divide-y">
+        <div className="mb-8">
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+            League Settings
+          </h1>
+          <h2 className="text-gray-600 text-md sm:text-lg font-medium text-center truncate max-w">
+            {league.name}
+          </h2>
+        </div>
+
         {/* Success Message */}
         {success && (
-          <div className="mx-auto w-full mb-4 bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3" role="alert">
-            <div className="flex items-center justify-between">
-              <div>
-                <strong className="font-bold">Success: </strong>
-                <span className="block sm:inline">{success}</span>
-              </div>
-              <button 
-                onClick={() => setSuccess('')} 
-                className="text-green-700 hover:text-green-900 focus:outline-none"
-              >
-                ×
-              </button>
-            </div>
+          <div className="flex items-center bg-green-100 rounded-xl border border-green-400 text-green-700 px-4 py-3 mb-4">
+            <span className="material-symbols-outlined mr-2">check_circle</span>
+            <p>{success}</p>
+            <button onClick={() => setSuccess('')} className="ml-auto">
+              <span className="material-symbols-outlined">close</span>
+            </button>
           </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="mx-auto w-full mb-4 bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3" role="alert">
-            <div className="flex items-center justify-between">
-              <div>
-                <strong className="font-bold">Error: </strong>
-                <span className="block sm:inline">{error}</span>
-              </div>
-              <button 
-                onClick={() => setError('')} 
-                className="text-red-700 hover:text-red-900 focus:outline-none"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleChangeTeamName} className="my-4">
-          <div className="mb-4">
-            <h3 className="block text-xl font-bold mt-6 mb-2" htmlFor="teamName">
-              Team Name
-            </h3>
-            <p className="mb-2">Current Team Name: {userTeam.name}</p>
-            <input
-              className="w-1/4 shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="teamName"
-              type="text"
-              placeholder="Team Name"
-              value={newTeamName}
-              onChange={(e) => setNewTeamName(e.target.value)}
-            />
-          </div>
-          <button
-            className="bg-blue-500 hover:bg-blue-700 text-white w-1/4 font-bold py-2 px-4 mb-4 rounded-full focus:outline-none focus:shadow-outline"
-            type="submit"
-          >
-            Change Name
-          </button>
-        </form>
-        
-        {isCommissioner && (
-          <div className="my-4">
-            <h3 className="text-xl font-bold mt-6 mb-2">Draft Settings</h3>
-            <p className="mb-2">Current Draft Date: {formatDraftDateTime(leagueDraft.start_time)}</p>
-            <form onSubmit={handleChangeDraftDateTime}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="draftDate">
-                  New Draft Date
-                </label>
-                <input
-                  className="shadow appearance-none border rounded w-1/4 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  id="draftDate"
-                  type="date"
-                  value={newDraftDate}
-                  onChange={(e) => setNewDraftDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="draftTime">
-                  New Draft Time
-                </label>
-                <select
-                  className="shadow appearance-none border rounded w-1/4 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  id="draftTime"
-                  value={newDraftTime}
-                  onChange={(e) => setNewDraftTime(e.target.value)}
-                  required
-                >
-                  <option value="">Select a time</option>
-                  {generateTimeOptions()}
-                </select>
-              </div>
-              <button
-                className="bg-blue-500 hover:bg-blue-700 w-1/4 text-white font-bold mb-4 py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
-                type="submit"
-              >
-                Update Draft Date
-              </button>
-            </form>
-            <button
-                className="bg-blue-500 hover:bg-blue-700 w-1/4 text-white font-bold mb-4 py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
-                type="submit"
-                onClick={handleDraftStart}
-              >
-                Start Draft
+          <div className="flex items-center bg-red-100 rounded-xl border border-red-400 text-red-700 px-4 py-3 mb-4">
+            <span className="material-symbols-outlined mr-2">error</span>
+            <p>{error}</p>
+            <button onClick={() => setError('')} className="ml-auto">
+              <span className="material-symbols-outlined">close</span>
             </button>
           </div>
         )}
 
-        <div className="flex flex-col">
-          <h3 className="block text-xl font-bold mt-6 mb-2">Draft Settings</h3>
-          <p>Actions cannot be undone!</p>
-          {!isCommissioner && (
+        {/* Team Name Section */}
+        <form onSubmit={handleChangeTeamName} className="mb-8">
+          <h3 className="text-gray-600 text-lg font-medium mb-4">Team Name</h3>
+          <div 
+            className={`flex items-center bg-gray-100 border rounded-xl px-2 py-1 mb-4 cursor-text ${
+              validationError 
+                ? 'border-red-500' 
+                : 'border-gray-300 focus-within:border-blue-500'
+            }`}
+            onClick={handleDivClick}
+          >
+            <span className="material-symbols-outlined text-gray-500 mr-2 flex-shrink-0">sports_football</span>
+            <div className="w-full min-w-0"> {/* min-w-0 prevents flex child from expanding */}
+              <label className="block text-sm font-semibold text-gray-500 truncate">
+                Current Name: {userTeam.name}
+              </label>
+              <input
+                ref={teamNameInputRef}
+                type="text"
+                value={newTeamName}
+                onChange={handleTeamNameChange}
+                placeholder="Enter new team name"
+                className="bg-transparent focus:outline-none w-full text-gray-700 py-1 truncate"
+                maxLength={48}
+              />
+            </div>
+            {validationError && (
+              <span className="material-symbols-outlined !text-red-600 flex-shrink-0">error</span>
+            )}
+          </div>
+          <button
+            type="submit"
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all"
+          >
+            Update Team Name
+          </button>
+        </form>
+
+        {/* Draft Settings Section */}
+        {isCommissioner && leagueDraft.status === "scheduled" && (
+          <div className="mb-8">
+            <h3 className="text-gray-600 text-lg font-medium mb-4">Draft Settings</h3>
+            <p className="text-sm text-gray-600 mb-2">
+              Starts a 5 minute Draft Countdown!
+            </p>
+            <form className="space-y-4">
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleDraftStart}
+                  className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all"
+                >
+                  Start Draft
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Danger Zone */}
+        <div className="border-t pt-6">
+          <h3 className="text-gray-600 text-lg font-medium mb-2">League Deletion</h3>
+          <p className="text-sm text-gray-500 mb-4">The action of deleting an league cannot be undone!</p>
+          {!isCommissioner ? (
             <button
               onClick={() => {
                 setDeleteAction('team');
                 setShowDeleteModal(true);
               }}
-              className="bg-red-500 hover:bg-red-700 text-white w-1/4 font-bold py-2 px-4 mt-4 rounded-full focus:outline-none focus:shadow-outline"
+              className="flex items-center justify-center w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all"
             >
+              <span className="material-symbols-outlined mr-2">logout</span>
               Leave League
             </button>
-          )}
-          {isCommissioner && (
+          ) : (
             <button
               onClick={() => {
                 setDeleteAction('league');
                 setShowDeleteModal(true);
               }}
-              className="flex justify-center items-center w-1/4 bg-red-500 hover:bg-red-700 mt-4 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
+              className="flex items-center justify-center w-full bg-gradient-to-r from-rose-400 to-red-500 hover:from-rose-500 hover:to-red-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all"
             >
+              <span className="material-symbols-outlined mr-2">delete_forever</span>
               Delete League
-              <span class="material-symbols-outlined ml-2"> delete_forever </span>
             </button>
           )}
         </div>
       </div>
 
+      {/* Delete Modal */}
       {showDeleteModal && (
-        <div className="fixed z-10 inset-0 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Confirm {deleteAction === 'team' ? 'Leaving League' : 'League Deletion'}
-                </h3>
-                <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    Are you sure you want to {deleteAction === 'team' ? 'leave' : 'delete'} this league? This action cannot be undone.
-                  </p>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={handleDelete}
-                >
-                  {deleteAction === 'team' ? 'Leave' : 'Delete'}
-                </button>
-                <button
-                  type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={() => setShowDeleteModal(false)}
-                >
-                  Cancel
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold mb-4">
+              Confirm {deleteAction === 'team' ? 'Leaving League' : 'League Deletion'}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to {deleteAction === 'team' ? 'leave' : 'delete'} this league? 
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all"
+              >
+                {deleteAction === 'team' ? 'Leave League' : 'Delete League'}
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
   );
-};
+}
+
 
 function League() {
-    return (
-      <>
-        <Routes>
-          <Route path="/" element={<LeagueLanding />} />
-          <Route path="create" element={<LeagueCreate />} />
-          <Route path="home" element={<LeagueHome />} />
-          <Route path="join" element={<LeagueJoin />} />
-          <Route path="players" element={<div className="w-3/5 mx-auto mt-8 mb-8"><LeaguePlayers /></div>} />
-          <Route path="team" element={<div className='w-3/5 mx-auto mt-8 mb-8'><LeagueMyTeam /></div>} />
-          <Route path="scoreboard" element={<LeagueScoreboard />} />
-          <Route path="standings" element={<LeagueStandings />} />
-          <Route path="teams" element={<LeagueTeams />} />
-          <Route path="matchup" element={<LeagueMatchup />} />
-          <Route path="settings" element={<LeagueSettings />} />
-          <Route path="draft" element={<DraftHome />} />
-        </Routes>
-        <Outlet />
-      </>
-    );
-  }
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<LeagueLanding />} />
+        <Route path="create" element={<LeagueCreate />} />
+        <Route path="home" element={<LeagueHome />} />
+        <Route path="join" element={<LeagueJoin />} />
+        <Route path="players" element={<LeaguePlayers />} />
+        <Route path="team" element={<LeagueMyTeam />} />
+        <Route path="scoreboard" element={<LeagueScoreboard />} />
+        <Route path="standings" element={<LeagueStandings />} />
+        <Route path="matchup" element={<LeagueMatchup />} />
+        <Route path="settings" element={<LeagueSettings />} />
+        <Route path="draft" element={<DraftHome />} />
+      </Routes>
+      <Outlet />
+    </>
+  );
+}
   
   export default League;

@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from services.draft_manager import DraftManager
 from utils.db import get_database
 from pydantic import BaseModel
-from models import PyObjectId, Draft
+from models import PyObjectId, Draft, NFLPlayer
 import random
 from typing import List
 from pymongo.errors import PyMongoError
@@ -132,6 +132,36 @@ async def draft_player(league_id: str, team_id: str, player: PlayerDraft):
                     next_drafter =  draft["draft_order"][len(draft["draft_order"]) - current_pick]
 
                 next_pick_time = datetime.now() + timedelta(minutes=1) + timedelta(seconds=2)
+                if current_round > draft["total_rounds"]:
+                    # Update draft status within the same transaction
+                    await db.drafts.update_one(
+                        {"_id": object_draft_id},
+                        {"$set": {
+                            "current_round": current_round,
+                            "current_pick": current_pick,
+                            "next_pick_time": next_pick_time,
+                            "status": "completed"  # Set status in same transaction
+                        },
+                        "$addToSet": {"pick_list": player.player_id}},
+                        session=session
+                    )
+
+                    # Broadcast after transaction completes
+                    await draft_manager.broadcast(
+                        {
+                            "type": "draft_ended",
+                            "next_drafter": ""
+                        },
+                        league_id
+                    )
+
+                    d_id = league["draft"]
+                    if d_id in draft_manager.active_drafts:
+                        draft_manager.active_drafts[d_id].cancel()
+                        del draft_manager.active_drafts[d_id]
+                        
+                    return {"message": f"Player successfully drafted to position {slot_index}"}
+
                 await db.drafts.update_one(
                     {"_id": object_draft_id},
                     {"$set": {"current_round": current_round,
@@ -140,6 +170,10 @@ async def draft_player(league_id: str, team_id: str, player: PlayerDraft):
                      "$addToSet": {"pick_list": player.player_id}},
                     session=session
                 )
+
+                if current_round > draft["total_rounds"]:
+                    await draft_manager.stop_draft_monitoring(str(draft["_id"]))
+                    return
 
                 await draft_manager.broadcast(
                     {
@@ -220,8 +254,8 @@ async def get_draft(draft_id: str):
     raise HTTPException(status_code=404, detail="Draft not found")
 
 
-@router.post("/drafts/start/{draft_id}", response_model=Draft)
-async def start_draft(draft_id: str):
+@router.post("/drafts/wait/{draft_id}", response_model=Draft)
+async def wait_draft(draft_id: str):
     db = get_database()
 
     try:
@@ -229,6 +263,8 @@ async def start_draft(draft_id: str):
         draft = await db.drafts.find_one({"_id": object_draft_id})
         if not draft:
             raise HTTPException(status_code=404, detail="Draft not found")
+        elif draft["status"] != "scheduled":
+            raise HTTPException(status_code=403, detail="Draft is/has already waiting")
         object_league_id = PyObjectId(draft["league"])
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid draft ID format")
@@ -244,13 +280,53 @@ async def start_draft(draft_id: str):
         {"$set": {"draft_order": new_draft_order,
                   "start_time":  datetime.now() + timedelta(minutes=5),
                   "next_pick_time":  next_pick_time,
-                  "status": "started"}}
+                  "current_pick": -1,
+                  "status": "waiting"
+                  }
+        }
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Failed to wait the draft")
+
+    await draft_manager.start_waiting_monitoring(draft_id, str(draft["league"]))
+
+    await draft_manager.broadcast(
+        {
+            "type": "draft_waiting",
+            "next_pick_time": str(next_pick_time)
+        },
+        str(draft["league"])
+    )
+
+    updated_draft = await db.drafts.find_one({"_id": object_draft_id})
+    
+    return Draft(**updated_draft)
+
+@router.post("/drafts/start/{draft_id}", response_model=Draft)
+async def start_draft(draft_id: str):
+    db = get_database()
+
+    try:
+        object_draft_id = PyObjectId(draft_id)
+        draft = await db.drafts.find_one({"_id": object_draft_id})
+        if not draft:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        object_league_id = PyObjectId(draft["league"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid draft ID format")
+    
+    next_pick_time = datetime.now() + timedelta(seconds=draft["time_per_pick"])
+
+    result = await db.drafts.update_one(
+        {"_id": object_draft_id},
+        {"$set": {"next_pick_time":  next_pick_time,
+                  "status": "started",
+                  "current_pick": 1}}
     )
 
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Failed to start the draft")
-
-    await draft_manager.start_draft_monitoring(draft_id, str(draft["league"]))
 
     await draft_manager.broadcast(
         {
@@ -263,3 +339,53 @@ async def start_draft(draft_id: str):
     updated_draft = await db.drafts.find_one({"_id": object_draft_id})
     
     return Draft(**updated_draft)
+
+@router.get("/drafts/picks/{draft_id}", response_model=List[Optional[NFLPlayer]])
+async def get_draft_picks(draft_id: str):
+    db = get_database()
+    
+    try:
+        object_id = PyObjectId(draft_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid draft ID format")
+
+    # Get the draft document
+    draft = await db.drafts.find_one({"_id": object_id})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    # Create a list of the same length as pick_list
+    picks = [None] * len(draft["pick_list"])
+    
+    # Track valid IDs and their positions
+    valid_ids = []
+    id_positions = {}
+    
+    # Process each pick, keeping track of valid IDs and their positions
+    for position, player_id in enumerate(draft["pick_list"]):
+        try:
+            object_player_id = PyObjectId(player_id)
+            valid_ids.append(object_player_id)
+            id_positions[str(player_id)] = position
+        except Exception:
+            # Keep None for invalid IDs or empty slots
+            continue
+    
+    # Fetch all valid players in a single query
+    if valid_ids:
+        cursor = db.nflplayers.find({"_id": {"$in": valid_ids}})
+        player_list = await cursor.to_list(length=None)
+        players = {str(player["_id"]): player for player in player_list}
+        
+        # Place players in their correct positions
+        for player_id, position in id_positions.items():
+            if player_id in players:
+                # Add pick metadata to each player
+                player = players[player_id].copy()
+                team_count = len(draft["draft_order"])
+                player["round"] = (position // team_count) + 1
+                player["pick"] = (position % team_count) + 1
+                player["pick_number"] = position + 1
+                picks[position] = player
+    
+    return picks

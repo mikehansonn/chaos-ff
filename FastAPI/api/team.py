@@ -1,3 +1,4 @@
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from models.team import Team
 from utils.db import get_database
@@ -88,6 +89,48 @@ async def get_team(team_id: str):
             wins=0,
             losses=0
         )
+    
+@router.get("/teams/roster/{team_id}", response_model=List[Optional[NFLPlayer]])
+async def get_team_roster(team_id: str):
+    db = get_database()
+    
+    try:
+        object_id = PyObjectId(team_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid team ID format")
+
+    # Get the team document
+    team = await db.teams.find_one({"_id": object_id})
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Filter out None values and convert valid IDs
+    valid_ids = []
+    id_positions = {}  # Keep track of positions for each ID
+    
+    for position, player_id in enumerate(team["roster"]):
+        if player_id is not None:
+            try:
+                object_player_id = PyObjectId(player_id)
+                valid_ids.append(object_player_id)
+                id_positions[str(player_id)] = position
+            except Exception:
+                pass
+    
+    # Fetch all valid players in a single query
+    players = {}
+    if valid_ids:
+        cursor = db.nflplayers.find({"_id": {"$in": valid_ids}})
+        player_list = await cursor.to_list(length=None)
+        players = {str(player["_id"]): player for player in player_list}
+    
+    # Construct final roster maintaining original positions
+    roster = [None] * len(team["roster"])
+    for player_id, position in id_positions.items():
+        if player_id in players:
+            roster[position] = players[player_id]
+    
+    return roster
 
 @router.delete("/teams/{team_id}", response_model=dict)
 async def delete_team(team_id: str):

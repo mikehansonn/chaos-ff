@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # FastAPI backend service
+  api:
+    build: 
+      context: ./FastAPI
+      dockerfile: ../docker/api/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./FastAPI:/app
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  # Redis service for message broker
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  # Celery worker for data scraping
+  scraper_worker:
+    build:
+      context: ./FastAPI
+      dockerfile: ../docker/worker/Dockerfile
+    volumes:
+      - ./FastAPI:/app
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A services.scrape_worker worker --loglevel=info
+    networks:
+      - app-network
+
+  # Celery beat scheduler
+  scraper_beat:
+    build:
+      context: ./FastAPI
+      dockerfile: ../docker/worker/Dockerfile
+    volumes:
+      - ./FastAPI:/app
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A services.scrape_worker beat --loglevel=info
+    networks:
+      - app-network
+
+  # React frontend
+  frontend:
+    build:
+      context: ./fantasy-app
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./fantasy-app:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

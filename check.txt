@@ -1,0 +1,5 @@
+{
+    "taskArns": [
+        "arn:aws:ecs:us-east-1:205610973265:task/fantasy-football-cluster/e5cfef598933481a895c563e6ef0bc15"
+    ]
+}
