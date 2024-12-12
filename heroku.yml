@@ -1,26 +1,31 @@
-build:
-  docker:
-    api:
-      dockerfile: docker/api/Dockerfile
-      context: FastAPI
-    worker:
-      dockerfile: docker/worker/Dockerfile
-      context: FastAPI
-    beat:
-      dockerfile: docker/worker/Dockerfile
-      context: FastAPI
-    web:
-      dockerfile: fantasy-app/Dockerfile
-      context: fantasy-app
-
-run:
-  api: uvicorn main:app --host 0.0.0.0 --port $PORT
-  worker: celery -A services.scrape_worker worker --loglevel=info
-  beat: celery -A services.scrape_worker beat --loglevel=info
-  web: npm start
-
 setup:
   addons:
     - plan: heroku-redis:hobby-dev
+      as: REDIS
+
+build:
+  docker:
+    api: ./FastAPI/../docker/api/Dockerfile
+    scraper_worker: ./FastAPI/../docker/worker/Dockerfile
+    scraper_beat: ./FastAPI/../docker/worker/Dockerfile
+    frontend: ./fantasy-app/Dockerfile
   config:
     MONGODB_URL: ${MONGODB_URL}
+
+run:
+  api:
+    command: uvicorn main:app --host=0.0.0.0 --port=8000
+    docker:
+      image: api
+  scraper_worker:
+    command: celery -A services.scrape_worker worker --loglevel=info
+    docker:
+      image: scraper_worker
+  scraper_beat:
+    command: celery -A services.scrape_worker beat --loglevel=info
+    docker:
+      image: scraper_beat
+  frontend:
+    command: npm start
+    docker:
+      image: frontend
