@@ -1,20 +1,22 @@
-// heroku.yml
-setup:
-  addons:
-    - plan: heroku-redis:hobby-dev
-      as: REDIS
-  config:
-    MONGODB_URL: ${MONGODB_URL}
-
 build:
   docker:
-    api: docker/api/Dockerfile
-    worker: docker/worker/Dockerfile
-    beat: docker/worker/Dockerfile
-    web: fantasy-app/Dockerfile
+    api:
+      dockerfile: docker/api/Dockerfile
+    worker:
+      dockerfile: docker/worker/Dockerfile
+    beat:
+      dockerfile: docker/worker/Dockerfile
+    web:
+      dockerfile: fantasy-app/Dockerfile
 
 run:
   api: uvicorn main:app --host 0.0.0.0 --port $PORT
   worker: celery -A services.scrape_worker worker --loglevel=info
   beat: celery -A services.scrape_worker beat --loglevel=info
   web: npm start
+
+setup:
+  addons:
+    - plan: heroku-redis:hobby-dev
+  config:
+    MONGODB_URL: ${MONGODB_URL}
