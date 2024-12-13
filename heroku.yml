@@ -2,7 +2,7 @@ build:
   docker:
     web: fantasy-app/Dockerfile
     api: docker/api/Dockerfile
-    worker: FastAPI/Dockerfile
+    worker: docker/worker/Dockerfile
     beat: FastAPI/Dockerfile
 
 run:

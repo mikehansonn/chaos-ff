@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m celeryuser
 
 # Copy FastAPI application code - copy from FastAPI directory
-COPY FastAPI/ /app/
+COPY . .
 
 # Change ownership of the workdir
 RUN chown -R celeryuser:celeryuser /app
