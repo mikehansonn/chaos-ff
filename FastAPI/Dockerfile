@@ -5,7 +5,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # Copy requirements first to leverage Docker cache
-COPY requirements.txt /app/
+COPY FastAPI/requirements.txt /app/
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create a non-root user
 RUN useradd -m celeryuser
 
-# Copy FastAPI application code
-COPY . /app/
+# Copy FastAPI application code - copy from FastAPI directory
+COPY FastAPI/ /app/
 
 # Change ownership of the workdir
 RUN chown -R celeryuser:celeryuser /app
