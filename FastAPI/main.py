@@ -52,7 +52,8 @@ async def celery_status():
 
 # Configure CORS
 origins = [
-    "http://localhost:3000"  # Assuming your React app runs on port 3000
+    "http://localhost:3000", 
+    "https://chaos-ff-53c4135ff7c5.herokuapp.com",  
 ]
 
 app.add_middleware(
