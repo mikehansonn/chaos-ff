@@ -4,7 +4,7 @@ import axios from 'axios';
 const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'production') {
     // Use the Heroku domain for production
-    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com:8000';
+    return 'http://0.0.0.0:8000';
   }
   // Use localhost for development
   return 'http://localhost:8000';
