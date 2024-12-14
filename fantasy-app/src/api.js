@@ -1,18 +1,28 @@
-import axios from 'axios'
+import axios from 'axios';
+
+// Define the base URL based on environment
+const getBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // Use the Heroku domain for production
+    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com';
+  }
+  // Use localhost for development
+  return 'http://localhost:8000';
+};
 
 const api = axios.create({
-    baseURL: 'http://localhost:8000',
+  baseURL: getBaseUrl(),
 });
 
 api.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default api;
