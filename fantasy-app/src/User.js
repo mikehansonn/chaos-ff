@@ -34,6 +34,8 @@ function UserProfile() {
         const response = await api.get('/users/me/', {
           headers: { Authorization: `Bearer ${token}` }
         });
+        console.log(response);
+        console.log(response.data);
         setUserData(response.data);
         fetchTeams(response.data.teams);
         fetchLeagues(response.data.leagues);
