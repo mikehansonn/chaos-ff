@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'production') {
-    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com:8000';
+    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com';
   }
   return 'http://localhost:8000';
 };

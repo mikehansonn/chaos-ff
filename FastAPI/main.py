@@ -73,9 +73,3 @@ app.include_router(draft.router, tags=["drafts"])
 @app.get("/")
 async def root():
     return {"message": ""}
-
-port = int(os.getenv("PORT", 8000))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
