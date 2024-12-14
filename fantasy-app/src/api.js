@@ -1,8 +1,10 @@
 import axios from 'axios';
 
+// Define the base URL based on environment
 const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'production') {
-    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com';
+    // Use the Heroku domain for production
+    return 'https://chaos-ff-53c4135ff7c5.herokuapp.com:8000';
   }
   return 'http://localhost:8000';
 };
@@ -10,8 +12,6 @@ const getBaseUrl = () => {
 const api = axios.create({
   baseURL: getBaseUrl(),
 });
-
-console.log('API Base URL:', api.defaults.baseURL);
 
 api.interceptors.request.use(
   (config) => {
