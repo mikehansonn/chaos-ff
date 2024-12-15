@@ -14,5 +14,5 @@ build:
   setup:
     addons:
       - plan: heroku-redis:hobby-dev
-    config:
+    config: 
       MONGODB_URL: ${MONGODB_URL}
