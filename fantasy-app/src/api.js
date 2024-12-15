@@ -2,10 +2,6 @@ import axios from 'axios';
 
 // Define the base URL based on environment
 const getBaseUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    // Use the Heroku domain for production
-    return 'https://chaos-ff-api-e4512543d694.herokuapp.com/';
-  }
   return 'http://localhost:8000';
 };
 

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  api:
+    image: michaelhanson/chaos-ff:api-latest
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    networks:
+      - app-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  scraper_worker:
+    image: michaelhanson/chaos-ff:scraper-worker-latest
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A services.scrape_worker worker --loglevel=info
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  scraper_beat:
+    image: michaelhanson/chaos-ff:scraper-beat-latest
+    environment:
+      - MONGODB_URL=${MONGODB_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A services.scrape_worker beat --loglevel=info
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    image: michaelhanson/chaos-ff:frontend-latest
+    ports:
+      - "8080:80"  # Changed to port 80 for production
+    depends_on:
+      - api
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis_data:  # Persistent volume for Redis data
