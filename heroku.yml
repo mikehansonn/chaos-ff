@@ -2,8 +2,8 @@ build:
   docker:
     web: ./fantasy-app/Dockerfile
     api: ./FastAPI/Dockerfile
-    worker: ./docker/worker/Dockerfile
-    beat: ./docker/worker/Dockerfile
+    worker: ./FastAPI/Dockerfile
+    beat: ./FastAPI/Dockerfile
 
 run:
   web: npm run start:prod
