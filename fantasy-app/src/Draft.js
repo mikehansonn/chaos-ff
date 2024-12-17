@@ -9,142 +9,150 @@ const tokenUtil = {
     getToken: () => localStorage.getItem('token'),
     removeToken: () => localStorage.removeItem('token'),
   };
-  
-  const POSITION_MAPPING = {
-    "QB": [0],
-    "RB": [1, 2],
-    "WR": [3, 4],
-    "TE": [5],
-    "FLEX": [6],
-    "DEF": [7],
-    "K": [8],
-    "BE": Array.from({ length: 8 }, (_, i) => i + 9)
-  };
 
-  function DraftMyTeam({ teamId, refreshTrigger }) {
-    const [team, setTeam] = useState(null);
-    const [roster, setRoster] = useState(Array(17).fill(null));
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+const getWebSocketUrl = () => {
+  const isLocal = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1';
+  return isLocal 
+    ? 'ws://localhost:8000'
+    : 'wss://chaos-ff-api-62fa41b772fd.herokuapp.com';
+};
   
-    useEffect(() => {
-      const fetchTeamData = async () => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          setError('No authentication token found');
-          setLoading(false);
-          return;
-        }
-  
-        try {
-          const teamResponse = await api.get(`/teams/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
-          setTeam(teamResponse.data);
-          const rosterResponse = await api.get(`/teams/roster/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
+const POSITION_MAPPING = {
+  "QB": [0],
+  "RB": [1, 2],
+  "WR": [3, 4],
+  "TE": [5],
+  "FLEX": [6],
+  "DEF": [7],
+  "K": [8],
+  "BE": Array.from({ length: 8 }, (_, i) => i + 9)
+};
 
-          setRoster(rosterResponse.data);
-          setLoading(false);
-        } catch (error) {
-          console.error('Error fetching team data:', error);
-          setError('Error fetching team data. Please try again.');
-          setLoading(false);
-        }
-      };
-  
-      if (teamId) {
-        fetchTeamData();
+function DraftMyTeam({ teamId, refreshTrigger }) {
+  const [team, setTeam] = useState(null);
+  const [roster, setRoster] = useState(Array(17).fill(null));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('No authentication token found');
+        setLoading(false);
+        return;
       }
-    }, [teamId, refreshTrigger]);
-  
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
-            <p className="mt-4 text-gray-600">Loading Team Data...</p>
-          </div>
-        </div>
-      );
-    }
-    if (error) return <div className="text-red-600">{error}</div>;
-    if (!team) return <div>No team data available</div>;
-  
-    const getPositionForIndex = (index) => {
-      for (const [position, indices] of Object.entries(POSITION_MAPPING)) {
-        if (indices.includes(index)) {
-          return position;
-        }
+
+      try {
+        const teamResponse = await api.get(`/teams/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
+        setTeam(teamResponse.data);
+        const rosterResponse = await api.get(`/teams/roster/${teamId}`, { headers: { Authorization: `Bearer ${token}` } });
+
+        setRoster(rosterResponse.data);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching team data:', error);
+        setError('Error fetching team data. Please try again.');
+        setLoading(false);
       }
-      return 'Unknown';
     };
 
+    if (teamId) {
+      fetchTeamData();
+    }
+  }, [teamId, refreshTrigger]);
+
+  if (loading) {
     return (
-      <div>
-        {/* Team Roster */}
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Lineup</h3>
-          </div>
-          <div className="border-t border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="w-20 pl-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slot</th>
-                  <th scope="col" className="w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                  <th scope="col" className="pr-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Player</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proj</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {roster.map((player, index) => (
-                  <React.Fragment key={index}>
-                    {index === 9 && (
-                      <tr>
-                        <td colSpan="6" className="px-6 py-4 whitespace-nowrap bg-gray-100">
-                          <div className="text-sm font-medium text-gray-900">Bench</div>
-                        </td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td className="pl-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{getPositionForIndex(index)}</div>
-                      </td>
-                      <td className="whitespace-nowrap">
-                      <div className="flex">
-                        {player && player.team && player.team !== "FA" ? (
-                          <img 
-                            src={`https://a.espncdn.com/i/teamlogos/nfl/500/${player.team.toLowerCase()}.png`}
-                            alt={`${player.team} logo`}
-                            className="w-10 h-10 object-contain opacity-90"
-                          />
-                        ) : player && player.team === "FA" ? (
-                          <img 
-                            src={`https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`}
-                            alt="NFL logo"
-                            className="w-10 h-10 object-contain opacity-90"
-                          />
-                        ) : null}
-                      </div>
-                    </td>
-                      <td className="pr-6 py-4 whitespace-nowrap border-r">
-                        <div className="flex items-center">
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{player ? player.name : "None"}</div>
-                            <div className="text-sm text-gray-500">{player ? `${player.position}` : "-"}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{(player ? player.projected_points : "-")}</div>
-                      </td>
-                    </tr>
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-6xl animate-spin text-blue-500">progress_activity</span>
+          <p className="mt-4 text-gray-600">Loading Team Data...</p>
         </div>
       </div>
     );
+  }
+  if (error) return <div className="text-red-600">{error}</div>;
+  if (!team) return <div>No team data available</div>;
+
+  const getPositionForIndex = (index) => {
+    for (const [position, indices] of Object.entries(POSITION_MAPPING)) {
+      if (indices.includes(index)) {
+        return position;
+      }
+    }
+    return 'Unknown';
+  };
+
+  return (
+    <div>
+      {/* Team Roster */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">Lineup</h3>
+        </div>
+        <div className="border-t border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="w-20 pl-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slot</th>
+                <th scope="col" className="w-10 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+                <th scope="col" className="pr-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Player</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proj</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {roster.map((player, index) => (
+                <React.Fragment key={index}>
+                  {index === 9 && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-4 whitespace-nowrap bg-gray-100">
+                        <div className="text-sm font-medium text-gray-900">Bench</div>
+                      </td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="pl-3 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{getPositionForIndex(index)}</div>
+                    </td>
+                    <td className="whitespace-nowrap">
+                    <div className="flex">
+                      {player && player.team && player.team !== "FA" ? (
+                        <img 
+                          src={`https://a.espncdn.com/i/teamlogos/nfl/500/${player.team.toLowerCase()}.png`}
+                          alt={`${player.team} logo`}
+                          className="w-10 h-10 object-contain opacity-90"
+                        />
+                      ) : player && player.team === "FA" ? (
+                        <img 
+                          src={`https://a.espncdn.com/combiner/i?img=/i/teamlogos/leagues/500/nfl.png`}
+                          alt="NFL logo"
+                          className="w-10 h-10 object-contain opacity-90"
+                        />
+                      ) : null}
+                    </div>
+                  </td>
+                    <td className="pr-6 py-4 whitespace-nowrap border-r">
+                      <div className="flex items-center">
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{player ? player.name : "None"}</div>
+                          <div className="text-sm text-gray-500">{player ? `${player.position}` : "-"}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{(player ? player.projected_points : "-")}</div>
+                    </td>
+                  </tr>
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DraftPlayers({ onPlayerAdded, websocket }) {
@@ -870,19 +878,14 @@ const DraftTimer = ({ websocket }) => {
   useEffect(() => {
     const fetchInitialState = async () => {
       try {
-        const token = localStorage.getItem('token');
         const searchParams = new URLSearchParams(window.location.search);
         const leagueId = searchParams.get('leagueid');
         
-        const response = await fetch(`http://localhost:8000/leagues/${leagueId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const league = await response.json();
+        const leagueResponse = await api.get(`/leagues/${leagueId}`);
+        const league = leagueResponse.data;
         
-        const draftResponse = await fetch(`http://localhost:8000/drafts/${league.draft}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const draft = await draftResponse.json();
+        const draftResponse = await api.get(`/drafts/${league.draft}`);
+        const draft = draftResponse.data;
         
         setDraftStatus(draft.status);
         if (draft.status === 'started') {
@@ -1241,7 +1244,8 @@ function DraftHome() {
         wsRef.current = null;
       }
 
-      const socket = new WebSocket(`ws://localhost:8000/ws/${leagueId}`);
+      const wsUrl = getWebSocketUrl();
+      const socket = new WebSocket(`${wsUrl}/ws/${leagueId}`);
       wsRef.current = socket;
       
       socket.onopen = () => {
@@ -1259,7 +1263,6 @@ function DraftHome() {
 
       socket.onclose = () => {
         console.log('WebSocket Disconnected');
-        // Only clear the ref if this is the current socket
         if (wsRef.current === socket) {
           wsRef.current = null;
           setWs(null);
@@ -1268,7 +1271,6 @@ function DraftHome() {
 
       socket.onerror = (error) => {
         console.error('WebSocket Error:', error);
-        // Cleanup on error
         if (wsRef.current === socket) {
           wsRef.current = null;
           setWs(null);
