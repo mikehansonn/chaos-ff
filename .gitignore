@@ -1,1 +1,3 @@
 /fantasy-app/node_modules/
+FastAPI/Procfile
+FastAPI/heroku.yml
