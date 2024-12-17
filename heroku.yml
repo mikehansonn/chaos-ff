@@ -1,0 +1,9 @@
+build:
+  docker:
+    api: ./Dockerfile
+
+setup:
+  addons:
+    - plan: heroku-redis:hobby-dev
+  config: 
+    MONGODB_URL: ${MONGODB_URL}
