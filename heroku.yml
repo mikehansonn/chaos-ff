@@ -1,6 +1,6 @@
 build:
   docker:
-    api: ./Dockerfile
+    web: ./Dockerfile
 
 setup:
   addons:
