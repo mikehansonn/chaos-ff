@@ -2,7 +2,13 @@ import axios from 'axios';
 
 // Define the base URL based on environment
 const getBaseUrl = () => {
-  return 'http://localhost:8000';
+  // Check if running locally by looking at the window location
+  const isLocal = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1';
+                  
+  return isLocal 
+    ? 'http://localhost:8000'
+    : 'https://chaos-ff-api-62fa41b772fd.herokuapp.com';
 };
 
 const api = axios.create({
