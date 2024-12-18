@@ -250,11 +250,26 @@ class DraftManager:
             print(f"Database error handling timeout: {str(e)}")
 
     async def connect_client(self, websocket: WebSocket, league_id: str):
-        """Register a new client connection"""
+        """Register a new client connection and start heartbeat"""
         await websocket.accept()
         if league_id not in self.connections:
             self.connections[league_id] = []
         self.connections[league_id].append(websocket)
+        
+        asyncio.create_task(self._heartbeat(websocket, league_id))
+
+    async def _heartbeat(self, websocket: WebSocket, league_id: str):
+        """Send periodic pings to keep the connection alive"""
+        try:
+            while True:
+                await asyncio.sleep(30)  # Send ping every 30 seconds
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except:
+                    await self.disconnect_client(websocket, league_id)
+                    break
+        except asyncio.CancelledError:
+            pass
 
     async def disconnect_client(self, websocket: WebSocket, league_id: str):
         """Remove a client connection"""
