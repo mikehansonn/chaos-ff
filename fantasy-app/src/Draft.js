@@ -851,6 +851,7 @@ const DraftTimer = ({ websocket }) => {
         setHasSkipped(false);
       }
       else if (data.type === 'draft_started') {
+        console.log("draft Started");
         setIsDraftStarted(true);
         if (data.next_pick_time) {
           const pickTime = data.next_pick_time.endsWith('Z') 
