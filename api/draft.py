@@ -273,12 +273,12 @@ async def wait_draft(draft_id: str):
     league_teams = league["teams"].copy()
     random.shuffle(league_teams)
     new_draft_order = league_teams
-    next_pick_time = datetime.now() + timedelta(minutes=5) + timedelta(seconds=draft["time_per_pick"])
+    next_pick_time = datetime.now() + timedelta(minutes=2) + timedelta(seconds=draft["time_per_pick"])
 
     result = await db.drafts.update_one(
         {"_id": object_draft_id},
         {"$set": {"draft_order": new_draft_order,
-                  "start_time":  datetime.now() + timedelta(minutes=5),
+                  "start_time":  datetime.now() + timedelta(minutes=2),
                   "next_pick_time":  next_pick_time,
                   "current_pick": -1,
                   "status": "waiting"

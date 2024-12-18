@@ -52,7 +52,6 @@ async def celery_status():
 
 # Configure CORS
 origins = [
-    "https://chaos-ff-app-b564eaadb8cf.herokuapp.com",
     "http://localhost:3000"
 ]
 
