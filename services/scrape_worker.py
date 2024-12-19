@@ -23,18 +23,21 @@ else:
 app = Celery('fantasy_football_scraper',
              broker=REDIS_URL,
              backend=REDIS_URL)
-app.conf.broker_use_ssl = {
-    'ssl_cert_reqs': None
-}
+app.conf.broker_transport_options = {'visibility_timeout': 3600}
+app.conf.broker_url = REDIS_URL
+app.conf.result_backend = REDIS_URL
 
-# Configure Celery
+# Rest of your Celery configs
 app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
-    broker_connection_retry_on_startup=True
+    broker_connection_retry_on_startup=True,
+    broker_use_ssl = {
+        'ssl_cert_reqs': None
+    }
 )
 
 def run_async_task(coro):
