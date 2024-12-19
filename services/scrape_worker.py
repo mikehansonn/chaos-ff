@@ -5,19 +5,19 @@ from services.data_scrape import DataScrapeManager
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
-from urllib.parse import urlparse
 
 load_dotenv()
 
 # Redis configuration
-redis_url = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
+REDIS_URL = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
 
-app = Celery('fantasy_football_scraper')
+# Create Celery app
+app = Celery('fantasy_football_scraper',
+             broker=REDIS_URL,
+             backend=REDIS_URL)
 
-# Force Redis as the broker and backend
+# Configure Celery
 app.conf.update(
-    broker_url=redis_url,
-    result_backend=redis_url,
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
@@ -25,11 +25,6 @@ app.conf.update(
     enable_utc=True,
     broker_connection_retry_on_startup=True
 )
-
-if redis_url.startswith('rediss://'):
-    app.conf.broker_use_ssl = {
-        'ssl_cert_reqs': None
-    }
 
 def run_async_task(coro):
     """Helper function to run async code in a new event loop"""
