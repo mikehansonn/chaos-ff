@@ -4,10 +4,6 @@ build:
     beat: ./Dockerfile
 
 setup:
-  addons:
-    - plan: heroku-redis:hobby-dev
-      as: REDIS
   config: 
-    REDIS_URL: ${REDIS_URL}
-    REDIS_TLS_URL: ${REDIS_TLS_URL}
     MONGODB_URL: ${MONGODB_URL}
+    REDISCLOUD_URL: ${REDISCLOUD_URL}

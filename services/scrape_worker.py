@@ -10,35 +10,26 @@ from urllib.parse import urlparse
 load_dotenv()
 
 # Redis configuration
-redis_url = os.getenv('REDIS_TLS_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+redis_url = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
 
-# If using TLS (Heroku Redis), modify the URL to use rediss:// protocol
-if redis_url.startswith('rediss://'):
-    parsed_url = urlparse(redis_url)
-    REDIS_URL = f"rediss://{parsed_url.netloc}{parsed_url.path}"
-else:
-    REDIS_URL = redis_url
+app = Celery('fantasy_football_scraper')
 
-# Create Celery app
-app = Celery('fantasy_football_scraper',
-             broker=REDIS_URL,
-             backend=REDIS_URL)
-app.conf.broker_transport_options = {'visibility_timeout': 3600}
-app.conf.broker_url = REDIS_URL
-app.conf.result_backend = REDIS_URL
-
-# Rest of your Celery configs
+# Force Redis as the broker and backend
 app.conf.update(
+    broker_url=redis_url,
+    result_backend=redis_url,
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
-    broker_connection_retry_on_startup=True,
-    broker_use_ssl = {
+    broker_connection_retry_on_startup=True
+)
+
+if redis_url.startswith('rediss://'):
+    app.conf.broker_use_ssl = {
         'ssl_cert_reqs': None
     }
-)
 
 def run_async_task(coro):
     """Helper function to run async code in a new event loop"""
