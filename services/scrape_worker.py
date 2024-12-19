@@ -5,16 +5,27 @@ from services.data_scrape import DataScrapeManager
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 load_dotenv()
 
 # Redis configuration
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+redis_url = os.getenv('REDIS_TLS_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+
+# If using TLS (Heroku Redis), modify the URL to use rediss:// protocol
+if redis_url.startswith('rediss://'):
+    parsed_url = urlparse(redis_url)
+    REDIS_URL = f"rediss://{parsed_url.netloc}{parsed_url.path}"
+else:
+    REDIS_URL = redis_url
 
 # Create Celery app
 app = Celery('fantasy_football_scraper',
              broker=REDIS_URL,
              backend=REDIS_URL)
+app.conf.broker_use_ssl = {
+    'ssl_cert_reqs': None
+}
 
 # Configure Celery
 app.conf.update(
