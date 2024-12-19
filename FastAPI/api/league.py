@@ -240,7 +240,7 @@ async def create_schedule(league_id: str, session: ClientSession = None):
     
     schedule = []
     current_week, _ = calculate_nfl_weeks()
-    remaining_weeks = list(range(current_week, 19))  # Weeks 9-18 if starting at week 9
+    remaining_weeks = list(range(current_week + 1, 19))  # Weeks 9-18 if starting at week 9
     
     # Calculate how many rounds we need to repeat to fill the remaining weeks
     base_schedule_rounds = num_teams - 1

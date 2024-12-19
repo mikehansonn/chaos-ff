@@ -2930,7 +2930,7 @@ function LeagueSettings() {
         {/* Danger Zone */}
         <div className="border-t pt-6">
           <h3 className="text-gray-600 text-lg font-medium mb-2">League Deletion</h3>
-          <p className="text-sm text-gray-500 mb-4">The action of deleting an league cannot be undone!</p>
+          <p className="text-sm text-gray-500 mb-4">The action of deleting a league cannot be undone!</p>
           {!isCommissioner ? (
             <button
               onClick={() => {
