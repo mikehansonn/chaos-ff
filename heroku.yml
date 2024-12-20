@@ -1,7 +1,7 @@
 build:
   docker:
-    worker: ./docker/worker/Dockerfile
-    beat: ./docker/beat/Dockerfile
+    worker: ./Dockerfile
+    beat: ./Dockerfile
 
 setup:
   config: 
