@@ -27,17 +27,17 @@ class MatchupManager:
         """Check if it's time to activate matchups (Thursday 7:30 PM UTC)"""
         current_time = datetime.now(timezone.utc)
 
-        if current_time.weekday() != 3:
+        if current_time.weekday() != 4:
             return False
             
-        activation_time = time(23, 59, tzinfo=timezone.utc)
+        activation_time = time(1, 00, tzinfo=timezone.utc)
         current_day_activation = datetime.combine(
             current_time.date(),
             activation_time
         )
         
         time_difference = abs((current_time - current_day_activation).total_seconds())
-        return time_difference <= 10000
+        return time_difference <= 120
 
     async def _check_matchup_activation(self):
         """Background task to check for matchup activation times"""
