@@ -2,7 +2,9 @@ build:
   docker:
     worker: ./Dockerfile
     beat: ./Dockerfile
-
+run:
+  worker: celery -A services.scrape_worker worker --loglevel=info
+  beat: celery -A services.scrape_worker beat --loglevel=info
 setup:
   config: 
     MONGODB_URL: ${MONGODB_URL}
