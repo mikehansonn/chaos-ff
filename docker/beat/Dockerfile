@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Default command (will be overridden by docker-compose)
-CMD ["celery", "-A", "services.scrape_worker", "beat", "--loglevel=info"]`
+CMD ["celery", "-A", "././services.scrape_worker", "beat", "--loglevel=info"]`
