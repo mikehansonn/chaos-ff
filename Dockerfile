@@ -12,3 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy FastAPI application code
 COPY . .
+
+# Default command (will be overridden by docker-compose)
+CMD ["celery", "-A", "services.scrape_worker", "worker", "--loglevel=info"]
