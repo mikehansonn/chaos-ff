@@ -48,8 +48,6 @@ def run_data_scrape():
     async def _run_scrape():
         scrape_manager = DataScrapeManager()
         try:
-            # Initialize first
-            await scrape_manager.initialize()
             result = await scrape_manager.run_full_scrape()
             return result
         finally:

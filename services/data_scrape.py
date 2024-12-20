@@ -2,7 +2,7 @@ import asyncio
 import requests
 from bs4 import BeautifulSoup
 import json
-from utils.db import get_database, close_mongo_connection
+from utils.db import get_database
 from services.fake_player import FakeNFLPlayer
 from datetime import datetime, time, timezone
 from typing import Dict, List, Tuple
@@ -22,14 +22,14 @@ class DataScrapeManager:
             self.initialized = True
 
     async def initialize(self):
-        """Initialize the data scrape manager and database connection"""
-        if not self.db:
-            self.db = await get_database()
+        """Initialize the data scrape manager and start background task"""
+        self.db = get_database()
+        self.scrape_task = asyncio.create_task(self._periodic_data_scrape())
+        print("Data scrape manager initialized")
 
     async def cleanup(self):
         """Cleanup async resources"""
         try:
-            # Cancel any running scrape task
             if self.scrape_task and not self.scrape_task.done():
                 self.scrape_task.cancel()
                 try:
@@ -38,8 +38,8 @@ class DataScrapeManager:
                     pass
 
             # Close MongoDB connection if it exists
-            if self.db:
-                await close_mongo_connection(self.db)
+            if self.db and hasattr(self.db, 'client'):
+                await self.db.client.close()
                 self.db = None
 
             # Reset initialization flag to allow proper reinitialization
@@ -50,28 +50,6 @@ class DataScrapeManager:
             
         except Exception as e:
             print(f"Error during cleanup: {e}")
-
-    async def write_individual_player(self, player):
-        """Write player data to database"""
-        if not self.db:
-            await self.initialize()
-            
-        player_object = await self.db.nflplayers.find_one({"name": player["name"]})
-        
-        if player_object:
-            await self.db.nflplayers.update_one(
-                {"_id": player_object["_id"]},
-                {
-                    "$set": {
-                        "weeks": player["weeks"],
-                        "projected_points": player["projected_points"],
-                        "total_points": player["total_points"],
-                        "opponent": player["opponent"],   
-                        "injury_status": player["injury_status"]
-                    }
-                })
-        else:
-            await self.db.nflplayers.insert_one(player)
 
     async def _periodic_data_scrape(self):
         """Background task to periodically scrape and update data"""
@@ -91,8 +69,6 @@ class DataScrapeManager:
     async def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         # Get current week (or use a fixed week for testing)
-        await self.initialize()
-
         week = self.get_week()
         
         # Scrape data
@@ -368,3 +344,23 @@ class DataScrapeManager:
                 player['weeks'][week - 1] = float(player['weeks'][week - 1])
         
         return current_players
+
+    async def write_individual_player(self, player):
+        db = get_database()
+        
+        player_object = await db.nflplayers.find_one({"name": player["name"]})
+        
+        if player_object:
+            await db.nflplayers.update_one(
+                {"_id": player_object["_id"]},
+                {
+                    "$set": {
+                        "weeks": player["weeks"],
+                        "projected_points": player["projected_points"],
+                        "total_points": player["total_points"],
+                        "opponent": player["opponent"],   
+                        "injury_status": player["injury_status"]
+                    }
+                })
+        else:
+            await db.nflplayers.insert_one(player)
