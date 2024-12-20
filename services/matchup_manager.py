@@ -30,14 +30,14 @@ class MatchupManager:
         if current_time.weekday() != 3:
             return False
             
-        activation_time = time(19, 30, tzinfo=timezone.utc)
+        activation_time = time(23, 59, tzinfo=timezone.utc)
         current_day_activation = datetime.combine(
             current_time.date(),
             activation_time
         )
         
         time_difference = abs((current_time - current_day_activation).total_seconds())
-        return time_difference <= 120
+        return time_difference <= 10000
 
     async def _check_matchup_activation(self):
         """Background task to check for matchup activation times"""
@@ -47,7 +47,7 @@ class MatchupManager:
                 if self.is_matchup_time():
                     await self._activate_matchups()
                 
-                await asyncio.sleep(3600)
+                await asyncio.sleep(10)
             except asyncio.CancelledError:
                 break
             except Exception as e:
