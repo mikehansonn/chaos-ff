@@ -45,18 +45,21 @@ def run_data_scrape():
     """
     Task to execute the NFL data scrape
     """
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+    async def _run_scrape():
         scrape_manager = DataScrapeManager()
-        
-        async def _run_scrape():
-            return await scrape_manager.run_full_scrape()
-            
-        result = asyncio.run(_run_scrape()) 
-        
-        return {"status": "success", "message": "Data scrape completed successfully", "result": result}
+        try:
+            result = await scrape_manager.run_full_scrape()
+            return result
+        finally:
+            await scrape_manager.cleanup()
+
+    try:
+        result = asyncio.run(_run_scrape())
+        return {
+            "status": "success", 
+            "message": "Data scrape completed successfully", 
+            "result": result
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

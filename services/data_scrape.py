@@ -27,6 +27,30 @@ class DataScrapeManager:
         self.scrape_task = asyncio.create_task(self._periodic_data_scrape())
         print("Data scrape manager initialized")
 
+    async def cleanup(self):
+        """Cleanup async resources"""
+        try:
+            if self.scrape_task and not self.scrape_task.done():
+                self.scrape_task.cancel()
+                try:
+                    await self.scrape_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Close MongoDB connection if it exists
+            if self.db and hasattr(self.db, 'client'):
+                await self.db.client.close()
+                self.db = None
+
+            # Reset initialization flag to allow proper reinitialization
+            self.initialized = False
+            
+            # Clear the singleton instance
+            type(self)._instance = None
+            
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
     async def _periodic_data_scrape(self):
         """Background task to periodically scrape and update data"""
         while True:
