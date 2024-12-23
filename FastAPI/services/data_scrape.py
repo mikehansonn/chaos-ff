@@ -8,23 +8,12 @@ from datetime import datetime, time, timezone
 from typing import Dict, List, Tuple
 
 class DataScrapeManager:
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self):
-        if not hasattr(self, 'initialized'):
-            self.scrape_task = None
-            self.db = None
-            self.initialized = True
+        self.db = None
 
     async def initialize(self):
-        """Initialize the data scrape manager and start background task"""
+        """Initialize the data scrape manager"""
         self.db = get_database()
-        self.scrape_task = asyncio.create_task(self._periodic_data_scrape())
         print("Data scrape manager initialized")
 
     async def _periodic_data_scrape(self):
@@ -45,6 +34,9 @@ class DataScrapeManager:
     async def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         # Get current week (or use a fixed week for testing)
+        if not self.db:
+            await self.initialize()
+
         week = self.get_week()
         
         # Scrape data
@@ -132,28 +124,14 @@ class DataScrapeManager:
         raise ValueError(f"No abbreviation found for team: {team_name}")
 
     def calculate_nfl_weeks(self) -> Tuple[int, int]:
-        season_start = datetime(2024, 9, 5, tzinfo=timezone.utc)
+        season_start = datetime.combine(datetime(2024, 9, 4), time(0, 0), tzinfo=timezone.utc)
         current_time = datetime.now(timezone.utc)
         days_since_start = (current_time - season_start).days
         current_week = (days_since_start // 7) + 1
-        
-        transition_time = datetime.combine(
-            current_time.date(),
-            time(7, 0),
-            tzinfo=timezone.utc
-        )
-        
-        current_weekday = current_time.weekday()
-        if current_weekday == 1 and current_time < transition_time:
-            pass
-        elif current_weekday >= 1:
-            current_week += 1
-        
-        projection_week = current_week
+
         current_week = max(1, min(18, current_week))
-        projection_week = max(1, min(18, projection_week))
-        
-        return current_week, projection_week
+
+        return current_week, current_week
 
     def get_week(self) -> int:
         current_week, _ = self.calculate_nfl_weeks()

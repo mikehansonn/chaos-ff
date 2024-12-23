@@ -1,9 +1,11 @@
 build:
   docker:
-    web: ./Dockerfile
-
+    worker: ./Dockerfile
+    beat: ./Dockerfile
+run:
+  worker: celery -A services.scrape_worker worker --loglevel=info
+  beat: celery -A services.scrape_worker beat --loglevel=info
 setup:
-  addons:
-    - plan: heroku-redis:hobby-dev
   config: 
     MONGODB_URL: ${MONGODB_URL}
+    REDISCLOUD_URL: ${REDISCLOUD_URL}

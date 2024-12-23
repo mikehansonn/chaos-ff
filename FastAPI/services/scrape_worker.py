@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Redis configuration
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_URL = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
 
 # Create Celery app
 app = Celery('fantasy_football_scraper',
@@ -46,21 +46,27 @@ def run_data_scrape():
     Task to execute the NFL data scrape
     """
     try:
-        # Initialize data scrape manager
+        # Create a new event loop for this task
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Create a fresh manager instance for each task
         scrape_manager = DataScrapeManager()
-        
-        # Run the scrape using our helper function
-        run_async_task(scrape_manager.run_full_scrape())
-        
-        return {"status": "success", "message": "Data scrape completed successfully"}
+            
+        # Run initialization and scrape
+        result = loop.run_until_complete(scrape_manager.run_full_scrape())
+            
+        return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    finally:
+        loop.close()
 
 # Schedule the task
 app.conf.beat_schedule = {
     'scrape-every-5-minutes': {
-        'task': 'scrape-every-5-minutes',  # Must match the task name above
-        'schedule': 300.0,  # 5 minutes in seconds
+        'task': 'scrape-every-5-minutes',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
     },
 }
 
