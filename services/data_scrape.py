@@ -238,6 +238,7 @@ class DataScrapeManager:
                 player.weeks = player_data.get('weeks', [])
                 players.append(player.to_dict())
             
+            print(players)
             return players
         except FileNotFoundError:
             print(f"Error: File not found at {file_path}")
