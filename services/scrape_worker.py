@@ -30,34 +30,38 @@ def run_async_task(coro):
     """Helper function to run async code in a new event loop"""
     try:
         # Get the current event loop or create a new one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         
         return loop.run_until_complete(coro)
     except Exception as e:
         raise e
-        
+
 @app.task(name='scrape-every-5-minutes')
 def run_data_scrape():
     """
     Task to execute the NFL data scrape
     """
-    try:
-        # Create a fresh manager instance for each task
-        scrape_manager = DataScrapeManager()
-            
-        # Use asyncio.run which handles loop creation/cleanup
-        result = scrape_manager.run_full_scrape()
-            
-        return {"status": "success", "message": "Data scrape completed successfully", "result": result}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Create a fresh manager instance for each task
+    scrape_manager = DataScrapeManager()
+        
+    # Run initialization and scrape
+    result = loop.run_until_complete(scrape_manager.run_full_scrape())
+        
+    return {"status": "success", "message": "Data scrape completed successfully", "result": result}
 
 # Schedule the task
 app.conf.beat_schedule = {
     'scrape-every-5-minutes': {
         'task': 'scrape-every-5-minutes',
-        'schedule': crontab(minute='*/2'),  # Every 5 minutes
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
     },
 }
 
