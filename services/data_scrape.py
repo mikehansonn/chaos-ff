@@ -8,16 +8,25 @@ from datetime import datetime, time, timezone
 from typing import Dict, List, Tuple
 
 class DataScrapeManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
         if not hasattr(self, 'initialized'):
             self.scrape_task = None
             self.db = None
+            self.loop = None
             self.initialized = True
 
     async def initialize(self):
         """Initialize the data scrape manager and start background task"""
+        # Get current loop
+        self.loop = asyncio.get_running_loop()
         self.db = get_database()
-        self.scrape_task = asyncio.create_task(self._periodic_data_scrape())
         print("Data scrape manager initialized")
 
     async def _periodic_data_scrape(self):
@@ -38,6 +47,17 @@ class DataScrapeManager:
     async def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         # Get current week (or use a fixed week for testing)
+        if self.scrape_task and not self.scrape_task.done():
+            self.scrape_task.cancel()
+            try:
+                await self.scrape_task
+            except asyncio.CancelledError:
+                pass
+
+        # Initialize with current loop if needed
+        if self.loop != asyncio.get_running_loop():
+            await self.initialize()
+
         week = self.get_week()
         
         # Scrape data

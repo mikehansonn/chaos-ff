@@ -53,8 +53,12 @@ def run_data_scrape():
         # Initialize data scrape manager
         scrape_manager = DataScrapeManager()
         
-        # Run the scrape in the new loop
-        result = loop.run_until_complete(scrape_manager.run_full_scrape())
+        # Run initialization and scrape
+        async def run_task():
+            await scrape_manager.initialize()
+            return await scrape_manager.run_full_scrape()
+            
+        result = loop.run_until_complete(run_task())
         
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
