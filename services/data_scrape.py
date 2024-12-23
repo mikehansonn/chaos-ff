@@ -310,8 +310,10 @@ class DataScrapeManager:
         collection = self.db.nflplayers
         
         player_object = collection.find_one({"name": player["name"]})
-        print(player_object)
+
         if player_object:
+            pla = collection.find_one({"_id": player_object["_id"]})
+            print(pla)
             collection.update_one(
                 {"_id": player_object["_id"]},
                 {
