@@ -54,6 +54,7 @@ def run_data_scrape():
             await scrape_manager.cleanup()
 
     try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         result = asyncio.run(_run_scrape())
         return {
             "status": "success", 
