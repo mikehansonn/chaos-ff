@@ -38,7 +38,7 @@ class DataScrapeManager:
             await self.initialize()
 
         week = self.get_week()
-        
+
         # Scrape data
         proj_data = []
         week_data = []

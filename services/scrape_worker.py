@@ -15,7 +15,6 @@ REDIS_URL = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
 app = Celery('fantasy_football_scraper',
              broker=REDIS_URL,
              backend=REDIS_URL)
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Configure Celery
 app.conf.update(
@@ -37,28 +36,23 @@ def run_async_task(coro):
         return loop.run_until_complete(coro)
     except Exception as e:
         raise e
-
+    
 @app.task(name='scrape-every-5-minutes')
 def run_data_scrape():
     """
     Task to execute the NFL data scrape
     """
     try:
-        # Create a new event loop for this task
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         # Create a fresh manager instance for each task
         scrape_manager = DataScrapeManager()
             
-        # Run initialization and scrape
-        result = loop.run_until_complete(scrape_manager.run_full_scrape())
+        # Use asyncio.run which handles loop creation/cleanup
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        result = asyncio.run(scrape_manager.run_full_scrape())
             
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    finally:
-        loop.close()
 
 # Schedule the task
 app.conf.beat_schedule = {
