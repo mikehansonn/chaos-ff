@@ -7,6 +7,7 @@ from services.fake_player import FakeNFLPlayer
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
+from utils.db import get_database
 
 class DataScrapeManager:
     _instance = None
@@ -25,7 +26,7 @@ class DataScrapeManager:
             self.db = self.client[db_name]
             self.initialized = True
 
-    def run_full_scrape(self):
+    async def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         try:
             week = self.get_week()
@@ -55,7 +56,7 @@ class DataScrapeManager:
 
             # Update database
             for player in updated_players:
-                self.write_individual_player(player)
+                await self.write_individual_player(player)
 
             # Save to JSON file
             filename = "proj_players.json"
@@ -305,16 +306,13 @@ class DataScrapeManager:
         
         return current_players
 
-    def write_individual_player(self, player):
-        """Synchronous version of database write"""
-        collection = self.db.nflplayers
+    async def write_individual_player(self, player):
+        db = get_database()
         
-        player_object = collection.find_one({"name": player["name"]})
-
+        player_object = await db.nflplayers.find_one({"name": player["name"]})
+        
         if player_object:
-            pla = collection.find_one({"_id": player_object["_id"]})
-            print(pla)
-            result = collection.update_one(
+            await db.nflplayers.update_one(
                 {"_id": player_object["_id"]},
                 {
                     "$set": {
@@ -325,6 +323,5 @@ class DataScrapeManager:
                         "injury_status": player["injury_status"]
                     }
                 })
-            print(result)
         else:
-            collection.insert_one(player)
+            await db.nflplayers.insert_one(player)
