@@ -4,9 +4,16 @@ import json
 from datetime import datetime, time, timezone
 from typing import Dict, List, Tuple
 from services.fake_player import FakeNFLPlayer
+from models import PyObjectId
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, PyObjectId):
+            return str(o)
+        return super().default(o)
 
 class DataScrapeManager:
     _instance = None
@@ -19,9 +26,9 @@ class DataScrapeManager:
     def __init__(self):
         if not hasattr(self, 'initialized'):
             load_dotenv()
-            mongo_url = os.getenv("MONGODB_URL", "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/")
+            mongo_url = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
             self.client = MongoClient(mongo_url)
-            db_name = os.getenv('MONGODB_DB_NAME', 'fantasy-football')
+            db_name = os.getenv('MONGODB_DB_NAME', 'fantasy_football')
             self.db = self.client[db_name]
             self.initialized = True
 
@@ -51,19 +58,30 @@ class DataScrapeManager:
             updated_players = self.process_player_data(players, proj_data, week_data, week)
             
             # Sort players by projected points
-            updated_players.sort(key=lambda x: x['projected_points'], reverse=True)
+            updated_players.sort(key=lambda x: float(x['projected_points'] or 0), reverse=True)
 
-            # Update database
+            # Update database and save to file
             for player in updated_players:
-                self.write_individual_player(player)
+                success = self.write_individual_player(player)
+                if not success:
+                    print(f"Failed to update player in database: {player['name']}")
 
-            # Save to JSON file
+            # Save to JSON file with custom encoder
             filename = "proj_players.json"
             with open(filename, 'w') as json_file:
-                json.dump(updated_players, json_file, indent=4)
+                json.dump(updated_players, json_file, indent=4, cls=JSONEncoder)
 
             print(f"Completed data scrape for week {week}")
-            return updated_players
+            
+            # Clean the result for Celery serialization
+            clean_players = []
+            for player in updated_players:
+                clean_player = player.copy()
+                if '_id' in clean_player:
+                    del clean_player['_id']
+                clean_players.append(clean_player)
+                
+            return clean_players
 
         except Exception as e:
             print(f"Error in run_full_scrape: {e}")
@@ -208,45 +226,26 @@ class DataScrapeManager:
                 print(f"Failed to fetch data. Status code: {response.status_code}")
             num += 25
 
-    def load_nfl_players(self):
-        file_path = 'proj_players.json'
+    def load_nfl_players(self) -> List[Dict]:
+        """Load players with proper error handling"""
         try:
-            with open(file_path, 'r') as file:
-                players_data = json.load(file)
+            collection = self.db.nflplayers
+            players = list(collection.find())
             
-            players = []
-            for player_data in players_data:
-                # Create new NFLPlayer instance
-                player = FakeNFLPlayer(
-                    name=player_data['name'],
-                    position=player_data['position'],
-                    team=player_data['team']
-                )
+            # Initialize weeks array if it doesn't exist
+            for player in players:
+                if 'weeks' not in player:
+                    player['weeks'] = [0.0] * 18  # NFL season has 18 weeks
                 
-                # Set basic properties
-                player.projected_points = player_data.get('projected_points', 0.0)
-                player.total_points = player_data.get('total_points', 0.0)
-                player.opponent = player_data.get('opponent', '')
-                player.injury_status = player_data.get('injury_status')
-                
-                # Set season stats
-                stats_data = player_data.get('stats', {})
-                for stat_name, value in stats_data.items():
-                    setattr(player.stats, stat_name, value)
-                
-                # Set weekly stats
-                player.weeks = player_data.get('weeks', [])
-                players.append(player.to_dict())
+                # Ensure numeric fields are properly typed
+                player['projected_points'] = float(player.get('projected_points', 0) or 0)
+                player['total_points'] = float(player.get('total_points', 0) or 0)
+                player['weeks'] = [float(week or 0) for week in player['weeks']]
             
             return players
-        except FileNotFoundError:
-            print(f"Error: File not found at {file_path}")
-            return []
-        except json.JSONDecodeError:
-            print(f"Error: Invalid JSON format in file {file_path}")
-            return []
-        except KeyError as e:
-            print(f"Error: Missing required field in JSON data: {e}")
+            
+        except Exception as e:
+            print(f"Error loading players from database: {e}")
             return []
 
     def process_player_data(self, players, proj_data, week_data, week):
@@ -304,23 +303,32 @@ class DataScrapeManager:
         
         return current_players
 
-    def write_individual_player(self, player):
-        """Synchronous version of database write"""
-        collection = self.db.nflplayers
-        
-        player_object = collection.find_one({"name": player["name"]})
-        
-        if player_object:
-            collection.update_one(
-                {"_id": player_object["_id"]},
-                {
-                    "$set": {
-                        "weeks": player["weeks"],
-                        "projected_points": player["projected_points"],
-                        "total_points": player["total_points"],
-                        "opponent": player["opponent"],   
-                        "injury_status": player["injury_status"]
-                    }
-                })
-        else:
-            collection.insert_one(player)
+    def write_individual_player(self, player) -> bool:
+        """Synchronous version of database write with error handling"""
+        try:
+            collection = self.db.nflplayers
+            
+            # Create a clean copy of the player data
+            player_data = player.copy()
+            if '_id' in player_data:
+                del player_data['_id']
+            
+            # Ensure numeric fields are properly typed
+            player_data['projected_points'] = float(player_data['projected_points'] or 0)
+            player_data['total_points'] = float(player_data['total_points'] or 0)
+            
+            # Clean weeks data
+            player_data['weeks'] = [float(week or 0) for week in player_data['weeks']]
+            
+            # Perform upsert operation
+            result = collection.update_one(
+                {"name": player_data["name"]},
+                {"$set": player_data},
+                upsert=True
+            )
+            
+            return result.acknowledged
+
+        except Exception as e:
+            print(f"Error writing player {player.get('name', 'unknown')} to database: {e}")
+            return False
