@@ -306,24 +306,52 @@ class DataScrapeManager:
         return current_players
 
     def write_individual_player(self, player):
-        """Synchronous version of database write"""
-        collection = self.db.nflplayers
-        
-        player_object = collection.find_one({"name": player["name"]})
-
-        if player_object:
-            pla = collection.find_one({"_id": player_object["_id"]})
-            print(pla)
-            collection.update_one(
-                {"_id": player_object["_id"]},
-                {
-                    "$set": {
-                        "weeks": player["weeks"],
-                        "projected_points": player["projected_points"],
-                        "total_points": player["total_points"],
-                        "opponent": player["opponent"],   
-                        "injury_status": player["injury_status"]
-                    }
-                })
-        else:
-            collection.insert_one(player)
+        """Synchronous version of database write with detailed debugging"""
+        try:
+            collection = self.db.nflplayers
+            
+            # Debug: Print the player we're trying to update
+            print(f"\nAttempting to update player: {player['name']}")
+            
+            # Find the existing player
+            player_object = collection.find_one({"name": player["name"]})
+            
+            if player_object:
+                print(f"Found existing player: {player_object['name']}")
+                print(f"Current values: Projected={player_object.get('projected_points')}, Total={player_object.get('total_points')}")
+                print(f"New values: Projected={player['projected_points']}, Total={player['total_points']}")
+                
+                # Construct update document
+                update_doc = {
+                    "weeks": player["weeks"],
+                    "projected_points": float(player["projected_points"]),
+                    "total_points": float(player["total_points"]),
+                    "opponent": player["opponent"],
+                    "injury_status": player["injury_status"]
+                }
+                
+                # Debug: Print the update document
+                print(f"Update document: {update_doc}")
+                
+                # Perform update with explicit type conversion
+                result = collection.update_one(
+                    {"_id": player_object["_id"]},
+                    {"$set": update_doc}
+                )
+                
+                # Debug: Print update result
+                print(f"Update result - matched: {result.matched_count}, modified: {result.modified_count}")
+                
+                # Verify the update
+                updated_player = collection.find_one({"_id": player_object["_id"]})
+                print(f"After update: Projected={updated_player.get('projected_points')}, Total={updated_player.get('total_points')}")
+                
+            else:
+                print(f"No existing player found - inserting new player: {player['name']}")
+                result = collection.insert_one(player)
+                print(f"Insert result - inserted_id: {result.inserted_id}")
+                
+        except Exception as e:
+            print(f"Error in write_individual_player for {player['name']}: {str(e)}")
+            print(f"Error type: {type(e).__name__}")
+            raise
