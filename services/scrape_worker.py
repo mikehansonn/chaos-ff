@@ -1,11 +1,8 @@
 from celery import Celery
 from celery.schedules import crontab
-import asyncio
 from services.data_scrape import DataScrapeManager
-import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
-from functools import wraps
 
 load_dotenv()
 
@@ -27,44 +24,27 @@ app.conf.update(
     broker_connection_retry_on_startup=True
 )
 
-def async_task(f):
-    """Decorator to handle async tasks properly"""
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(f(*args, **kwargs))
-        finally:
-            loop.close()
-    return wrapped
-
 @app.task(name='scrape-every-5-minutes')
-@async_task
-async def run_data_scrape():
+def run_data_scrape():
     """
     Task to execute the NFL data scrape
     """
     try:
-        # Create a fresh manager instance for each task
+        # Initialize data scrape manager
         scrape_manager = DataScrapeManager()
         
-        # Initialize the manager
-        await scrape_manager.initialize()
-        
-        # Run the scrape
-        await scrape_manager.run_full_scrape()
+        # Run scrape
+        result = scrape_manager.run_full_scrape()
         
         return {
-            "status": "success",
-            "message": "Data scrape completed successfully",
-            "result": None
+            "status": "success", 
+            "message": "Data scrape completed successfully", 
+            "result": result
         }
     except Exception as e:
         return {
-            "status": "error",
-            "message": f"Data scrape failed: {str(e)}",
-            "result": None
+            "status": "error", 
+            "message": str(e)
         }
 
 # Schedule the task

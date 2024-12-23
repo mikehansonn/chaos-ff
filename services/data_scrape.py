@@ -1,47 +1,34 @@
-import asyncio
 import requests
 from bs4 import BeautifulSoup
 import json
-from utils.db import get_database
-from services.fake_player import FakeNFLPlayer
 from datetime import datetime, time, timezone
 from typing import Dict, List, Tuple
+from services.fake_player import FakeNFLPlayer
+from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
 
 class DataScrapeManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.db = None
-        self._loop = None
+        if not hasattr(self, 'initialized'):
+            load_dotenv()
+            mongo_url = os.getenv("MONGODB_URL", "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/")
+            self.client = MongoClient(mongo_url)
+            self.db = self.client.get_database()
+            self.initialized = True
 
-    async def initialize(self):
-        """Initialize the data scrape manager"""
-        self._loop = asyncio.get_event_loop()
-        self.db = get_database()
-        print("Data scrape manager initialized")
-
-    async def _periodic_data_scrape(self):
-        """Background task to periodically scrape and update data"""
-        while True:
-            try:
-                print("Starting periodic data scrape")
-                await self.run_full_scrape()
-                # Sleep for 5 minutes (300 seconds)
-                await asyncio.sleep(300)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"Error in periodic data scrape: {e}")
-                # If there's an error, wait 5 minutes before trying again
-                await asyncio.sleep(300)
-
-    async def run_full_scrape(self):
+    def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
-        # Get current week (or use a fixed week for testing)
         try:
-            if not self.db:
-                await self.initialize()
-
             week = self.get_week()
-
+            
             # Scrape data
             proj_data = []
             week_data = []
@@ -67,7 +54,7 @@ class DataScrapeManager:
 
             # Update database
             for player in updated_players:
-                await self.write_individual_player(player)
+                self.write_individual_player(player)
 
             # Save to JSON file
             filename = "proj_players.json"
@@ -75,17 +62,11 @@ class DataScrapeManager:
                 json.dump(updated_players, json_file, indent=4)
 
             print(f"Completed data scrape for week {week}")
-            
             return updated_players
-            
+
         except Exception as e:
-            print(f"Error in full scrape: {e}")
+            print(f"Error in run_full_scrape: {e}")
             raise
-        
-    def cleanup(self):
-        """Cancel the background task"""
-        if self.scrape_task:
-            self.scrape_task.cancel()
 
     # The following methods would be direct copies from the original data_scrape.py:
     def get_nfl_team_abbr(self, team_name):
@@ -322,25 +303,23 @@ class DataScrapeManager:
         
         return current_players
 
-    async def write_individual_player(self, player):
-        """Write individual player data to database"""
-        try:
-            player_object = await self.db.nflplayers.find_one({"name": player["name"]})
-            
-            if player_object:
-                await self.db.nflplayers.update_one(
-                    {"_id": player_object["_id"]},
-                    {
-                        "$set": {
-                            "weeks": player["weeks"],
-                            "projected_points": player["projected_points"],
-                            "total_points": player["total_points"],
-                            "opponent": player["opponent"],   
-                            "injury_status": player["injury_status"]
-                        }
-                    })
-            else:
-                await self.db.nflplayers.insert_one(player)
-        except Exception as e:
-            print(f"Error writing player {player['name']}: {e}")
-            raise
+    def write_individual_player(self, player):
+        """Synchronous version of database write"""
+        collection = self.db.nflplayers
+        
+        player_object = collection.find_one({"name": player["name"]})
+        
+        if player_object:
+            collection.update_one(
+                {"_id": player_object["_id"]},
+                {
+                    "$set": {
+                        "weeks": player["weeks"],
+                        "projected_points": player["projected_points"],
+                        "total_points": player["total_points"],
+                        "opponent": player["opponent"],   
+                        "injury_status": player["injury_status"]
+                    }
+                })
+        else:
+            collection.insert_one(player)
