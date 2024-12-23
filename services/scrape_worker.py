@@ -42,10 +42,12 @@ def run_async_task(coro):
 
 @app.task(name='scrape-every-5-minutes')
 def run_data_scrape():
+    """
+    Task to execute the NFL data scrape
+    """
     async def _run_scrape():
         scrape_manager = DataScrapeManager()
         try:
-            await scrape_manager.initialize()
             result = await scrape_manager.run_full_scrape()
             return result
         finally:

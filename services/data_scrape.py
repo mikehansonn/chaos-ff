@@ -22,8 +22,8 @@ class DataScrapeManager:
             self.initialized = True
 
     async def initialize(self):
-        """Initialize the data scrape manager and database connection"""
-        self.db = await get_database()  # Make sure get_database() is async
+        """Initialize the data scrape manager and start background task"""
+        self.db = get_database()
         self.scrape_task = asyncio.create_task(self._periodic_data_scrape())
         print("Data scrape manager initialized")
 
@@ -346,13 +346,12 @@ class DataScrapeManager:
         return current_players
 
     async def write_individual_player(self, player):
-        if not self.db:
-            self.db = await get_database()  # Re-initialize if needed
-            
-        player_object = await self.db.nflplayers.find_one({"name": player["name"]})
+        db = get_database()
+        
+        player_object = await db.nflplayers.find_one({"name": player["name"]})
         
         if player_object:
-            await self.db.nflplayers.update_one(
+            await db.nflplayers.update_one(
                 {"_id": player_object["_id"]},
                 {
                     "$set": {
@@ -364,4 +363,4 @@ class DataScrapeManager:
                     }
                 })
         else:
-            await self.db.nflplayers.insert_one(player)
+            await db.nflplayers.insert_one(player)
