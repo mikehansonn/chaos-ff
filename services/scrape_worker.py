@@ -56,6 +56,9 @@ def run_data_scrape():
         # Run the scrape in the new loop
         result = loop.run_until_complete(scrape_manager.run_full_scrape())
         
+        # Clean up
+        loop.close()
+        
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
