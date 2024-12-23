@@ -47,7 +47,6 @@ def run_data_scrape():
         scrape_manager = DataScrapeManager()
             
         # Use asyncio.run which handles loop creation/cleanup
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         result = asyncio.run(scrape_manager.run_full_scrape())
             
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
@@ -58,7 +57,7 @@ def run_data_scrape():
 app.conf.beat_schedule = {
     'scrape-every-5-minutes': {
         'task': 'scrape-every-5-minutes',
-        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+        'schedule': crontab(minute='*/2'),  # Every 5 minutes
     },
 }
 
