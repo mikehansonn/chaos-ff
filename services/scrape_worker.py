@@ -30,11 +30,8 @@ def run_async_task(coro):
     """Helper function to run async code in a new event loop"""
     try:
         # Get the current event loop or create a new one
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
         return loop.run_until_complete(coro)
     except Exception as e:
