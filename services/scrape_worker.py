@@ -15,6 +15,7 @@ REDIS_URL = os.getenv('REDISCLOUD_URL', 'redis://localhost:6379/0')
 app = Celery('fantasy_football_scraper',
              broker=REDIS_URL,
              backend=REDIS_URL)
+asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Configure Celery
 app.conf.update(
