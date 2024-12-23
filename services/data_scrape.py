@@ -21,7 +21,8 @@ class DataScrapeManager:
             load_dotenv()
             mongo_url = os.getenv("MONGODB_URL", "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/")
             self.client = MongoClient(mongo_url)
-            self.db = self.client.get_database()
+            db_name = os.getenv('MONGODB_DB_NAME', 'fantasy-football')
+            self.db = self.client[db_name]
             self.initialized = True
 
     def run_full_scrape(self):
