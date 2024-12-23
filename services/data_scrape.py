@@ -19,9 +19,9 @@ class DataScrapeManager:
     def __init__(self):
         if not hasattr(self, 'initialized'):
             load_dotenv()
-            mongo_url = os.getenv("MONGODB_URL", "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/")
+            mongo_url = "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/"
             self.client = MongoClient(mongo_url)
-            db_name = os.getenv('MONGODB_DB_NAME', 'fantasy-football')
+            db_name = 'fantasy-football'
             self.db = self.client[db_name]
             self.initialized = True
 
