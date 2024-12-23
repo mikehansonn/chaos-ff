@@ -304,29 +304,23 @@ class DataScrapeManager:
         
         return current_players
 
-def write_individual_player(self, player):
+    def write_individual_player(self, player):
         """Synchronous version of database write"""
-        try:
-            collection = self.db.nflplayers
-            
-            player_object = collection.find_one({"name": player["name"]})
-            
-            if player_object:
-                result = collection.update_one(
-                    {"_id": player_object["_id"]},
-                    {
-                        "$set": {
-                            "weeks": player["weeks"],
-                            "projected_points": player["projected_points"],
-                            "total_points": player["total_points"],
-                            "opponent": player["opponent"],   
-                            "injury_status": player["injury_status"]
-                        }
-                    })
-                print(f"Updated player {player['name']}: {result.modified_count} document modified")
-            else:
-                result = collection.insert_one(player)
-                print(f"Inserted new player {player['name']}: {result.inserted_id}")
-        except Exception as e:
-            print(f"Error writing player {player['name']} to database: {e}")
-            raise
+        collection = self.db.nflplayers
+        
+        player_object = collection.find_one({"name": player["name"]})
+        print(player_object)
+        if player_object:
+            collection.update_one(
+                {"_id": player_object["_id"]},
+                {
+                    "$set": {
+                        "weeks": player["weeks"],
+                        "projected_points": player["projected_points"],
+                        "total_points": player["total_points"],
+                        "opponent": player["opponent"],   
+                        "injury_status": player["injury_status"]
+                    }
+                })
+        else:
+            collection.insert_one(player)
