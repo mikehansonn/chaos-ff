@@ -50,19 +50,17 @@ def run_data_scrape():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        # Initialize data scrape manager
+        # Create a fresh manager instance for each task
         scrape_manager = DataScrapeManager()
-        
-        # Run initialization and scrape
-        async def run_task():
-            await scrape_manager.initialize()
-            return await scrape_manager.run_full_scrape()
             
-        result = loop.run_until_complete(run_task())
-        
+        # Run initialization and scrape
+        result = loop.run_until_complete(scrape_manager.run_full_scrape())
+            
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    finally:
+        loop.close()
 
 # Schedule the task
 app.conf.beat_schedule = {
