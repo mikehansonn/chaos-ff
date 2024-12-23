@@ -7,7 +7,6 @@ from services.fake_player import FakeNFLPlayer
 from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
-from utils.db import get_database
 
 class DataScrapeManager:
     _instance = None
@@ -22,11 +21,11 @@ class DataScrapeManager:
             load_dotenv()
             mongo_url = "mongodb+srv://michaelhanson2030:325220@fantasy-football.3fwji.mongodb.net/"
             self.client = MongoClient(mongo_url)
-            db_name = 'fantasy-football'
+            db_name = 'src'
             self.db = self.client[db_name]
             self.initialized = True
 
-    async def run_full_scrape(self):
+    def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         try:
             week = self.get_week()
@@ -56,7 +55,7 @@ class DataScrapeManager:
 
             # Update database
             for player in updated_players:
-                await self.write_individual_player(player)
+                self.write_individual_player(player)
 
             # Save to JSON file
             filename = "proj_players.json"
@@ -239,7 +238,6 @@ class DataScrapeManager:
                 player.weeks = player_data.get('weeks', [])
                 players.append(player.to_dict())
             
-            print(players)
             return players
         except FileNotFoundError:
             print(f"Error: File not found at {file_path}")
@@ -306,13 +304,14 @@ class DataScrapeManager:
         
         return current_players
 
-    async def write_individual_player(self, player):
-        db = get_database()
+    def write_individual_player(self, player):
+        """Synchronous version of database write"""
+        collection = self.db.nflplayers
         
-        player_object = await db.nflplayers.find_one({"name": player["name"]})
+        player_object = collection.find_one({"name": player["name"]})
         
         if player_object:
-            await db.nflplayers.update_one(
+            collection.update_one(
                 {"_id": player_object["_id"]},
                 {
                     "$set": {
@@ -324,4 +323,4 @@ class DataScrapeManager:
                     }
                 })
         else:
-            await db.nflplayers.insert_one(player)
+            collection.insert_one(player)
