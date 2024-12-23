@@ -36,7 +36,7 @@ def run_async_task(coro):
         return loop.run_until_complete(coro)
     except Exception as e:
         raise e
-    
+        
 @app.task(name='scrape-every-5-minutes')
 def run_data_scrape():
     """
@@ -47,7 +47,7 @@ def run_data_scrape():
         scrape_manager = DataScrapeManager()
             
         # Use asyncio.run which handles loop creation/cleanup
-        result = asyncio.run(scrape_manager.run_full_scrape())
+        result = scrape_manager.run_full_scrape()
             
         return {"status": "success", "message": "Data scrape completed successfully", "result": result}
     except Exception as e:
