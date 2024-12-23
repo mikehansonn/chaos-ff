@@ -5,6 +5,7 @@ from services.data_scrape import DataScrapeManager
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
+from functools import wraps
 
 load_dotenv()
 
@@ -26,36 +27,45 @@ app.conf.update(
     broker_connection_retry_on_startup=True
 )
 
-def run_async_task(coro):
-    """Helper function to run async code in a new event loop"""
-    try:
-        # Get the current event loop or create a new one
+def async_task(f):
+    """Decorator to handle async tasks properly"""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        return loop.run_until_complete(coro)
-    except Exception as e:
-        raise e
+            return loop.run_until_complete(f(*args, **kwargs))
+        finally:
+            loop.close()
+    return wrapped
 
 @app.task(name='scrape-every-5-minutes')
-def run_data_scrape():
+@async_task
+async def run_data_scrape():
     """
     Task to execute the NFL data scrape
     """
-    
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # Create a fresh manager instance for each task
-    scrape_manager = DataScrapeManager()
+    try:
+        # Create a fresh manager instance for each task
+        scrape_manager = DataScrapeManager()
         
-    # Run initialization and scrape
-    result = loop.run_until_complete(scrape_manager.run_full_scrape())
+        # Initialize the manager
+        await scrape_manager.initialize()
         
-    return {"status": "success", "message": "Data scrape completed successfully", "result": result}
+        # Run the scrape
+        await scrape_manager.run_full_scrape()
+        
+        return {
+            "status": "success",
+            "message": "Data scrape completed successfully",
+            "result": None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Data scrape failed: {str(e)}",
+            "result": None
+        }
 
 # Schedule the task
 app.conf.beat_schedule = {
