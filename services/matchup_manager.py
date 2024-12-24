@@ -45,7 +45,7 @@ class MatchupManager:
         if current_time.weekday() != 1:
             return False
             
-        activation_time = time(6, 20, tzinfo=timezone.utc)
+        activation_time = time(6, 33, tzinfo=timezone.utc)
         current_day_activation = datetime.combine(
             current_time.date(),
             activation_time
@@ -143,7 +143,7 @@ class MatchupManager:
                     return
 
                 if a_total > b_total:
-                    winner = matchup['team_a']
+                    winner = str(matchup['team_a'])
                     await self.db.teams.update_one(
                         {'_id': PyObjectId(matchup['team_a'])},
                         {"$inc": {
@@ -160,7 +160,7 @@ class MatchupManager:
                         }}
                     )
                 elif a_total < b_total:
-                    winner = matchup['team_b']
+                    winner = str(matchup['team_b'])
                     await self.db.teams.update_one(
                         {'_id': PyObjectId(matchup['team_a'])},
                         {"$inc": {
