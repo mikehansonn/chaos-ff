@@ -102,7 +102,7 @@ async def get_matchup_rosters(matchup_id: str):
         "team_b_roster": team_b_roster
     }
 
-@router.get("/matchups/activate/{matchup_id}")
+@router.post("/matchups/activate/{matchup_id}")
 async def activate_matchup(matchup_id: str):
     db = get_database()
 
@@ -128,7 +128,7 @@ async def activate_matchup(matchup_id: str):
             }}
         )
 
-@router.get("/matchups/complete/{matchup_id}")
+@router.post("/matchups/complete/{matchup_id}")
 async def complete_active_matchups(matchup_id: str):
     db = get_database()
 
