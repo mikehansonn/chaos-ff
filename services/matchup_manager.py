@@ -45,14 +45,14 @@ class MatchupManager:
         if current_time.weekday() != 1:
             return False
             
-        activation_time = time(6, 10, tzinfo=timezone.utc)
+        activation_time = time(6, 20, tzinfo=timezone.utc)
         current_day_activation = datetime.combine(
             current_time.date(),
             activation_time
         )
         
         time_difference = abs((current_time - current_day_activation).total_seconds())
-        return time_difference <= 300
+        return time_difference <= 120
 
     async def _check_matchup_activation(self):
         """Background task to check for matchup activation times"""
@@ -63,7 +63,7 @@ class MatchupManager:
                     await self._activate_matchups()
 
                 if self.is_end_matchup_time():
-                    await self._activate_matchups()
+                    await self.complete_active_matchups()
                 
                 await asyncio.sleep(10)
             except asyncio.CancelledError:
@@ -72,7 +72,7 @@ class MatchupManager:
                 print(f"Error in matchup activation check: {e}")
                 await asyncio.sleep(3600) 
 
-    async def complete_active_matchups(self):
+    async def _activate_matchups(self):
         """Activate matchups for all leagues"""
         try:
             # Get all leagues
