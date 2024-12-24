@@ -371,7 +371,7 @@ function DraftPlayers({ onPlayerAdded, websocket }) {
   return (
     <div className="flex flex-col h-full relative">
       <div className="sticky top-0 z-10 pb-2">
-        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between bg-[#f0f0f0] bg-opacity-70">
           <FilterDropdown
             positions={positions}
             nameFilter={nameFilter}
@@ -1388,7 +1388,7 @@ function DraftHome() {
           <div className="mt-36 md:mt-40">
             <div className="flex flex-col xl:flex-row h-auto xl:h-5/6 gap-4">
               <div className="w-auto xl:w-3/5 overflow-hidden">
-                <div className="max-h-[calc(81vh)] overflow-y-auto">
+                <div className="md:max-h-[calc(81vh)] overflow-y-auto">
                 <DraftPlayers onPlayerAdded={handlePlayerAdded} websocket={ws} />
               </div>
             </div>
@@ -1408,7 +1408,7 @@ function DraftHome() {
                 </button>
               </div>
               {activeTab === 'leagueTeams' ? (
-                <div className="flex-1 max-h-[calc(75vh)] overflow-y-auto flex flex-col">
+                <div className="flex-1 md:max-h-[calc(75vh)] overflow-y-auto flex flex-col">
                   <div className="mb-2">
                     <select
                       value={activeTeam}
@@ -1425,7 +1425,7 @@ function DraftHome() {
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 max-h-[calc(75vh)] overflow-y-auto">
+                <div className="flex-1 md:max-h-[calc(75vh)] overflow-y-auto">
                   <DraftMyTeam teamId={userTeamId} key={userTeamId} refreshTrigger={playerAdded} />
                 </div>
               )}

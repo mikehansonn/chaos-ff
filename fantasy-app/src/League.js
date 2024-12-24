@@ -870,7 +870,7 @@ function LeaguePlayers() {
   }
 
   return (
-    <div className='w-full max-w-screen-2xl mx-auto md:pl-36 mt-16 md:mt-4 mb-8"'>
+    <div className='w-full max-w-screen-2xl mx-auto md:pl-36 mt-16 md:mt-4 mb-4 pb-2'>
       <FilterDropdown
         positions={positions}
         nameFilter={nameFilter}
@@ -915,7 +915,7 @@ function LeaguePlayers() {
         </div>
       )}
 
-      <div className="relative bg-white shadow sm:rounded-lg max-h-[calc(80vh)] overflow-y-auto sticky top-0">
+      <div className="relative bg-white shadow sm:rounded-lg sticky top-0">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
