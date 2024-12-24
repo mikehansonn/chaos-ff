@@ -137,7 +137,7 @@ async def complete_active_matchups(matchup_id: str):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid matchup ID format")
     
-    matchup = db.matchups.find_one({"_id" : object_id})
+    matchup = await db.matchups.find_one({"_id" : object_id})
 
     active_a = matchup['team_a_roster'][:9]
     active_b = matchup['team_b_roster'][:9]
