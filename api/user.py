@@ -105,6 +105,9 @@ async def remove_user(user_id: str):
         raise HTTPException(status_code=400, detail="Invalid user ID format")
     
     user = await db.users.find_one({"_id": object_id})
+
+    if user["username"] == "admin" or user["username"] == "5":
+        raise HTTPException(status_code=403, detail="Admin cannot be deleted")
     
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
