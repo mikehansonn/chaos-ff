@@ -45,7 +45,7 @@ class MatchupManager:
         if current_time.weekday() != 1:
             return False
             
-        activation_time = time(6, 33, tzinfo=timezone.utc)
+        activation_time = time(6, 00, tzinfo=timezone.utc)
         current_day_activation = datetime.combine(
             current_time.date(),
             activation_time
