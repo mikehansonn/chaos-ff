@@ -40,10 +40,9 @@ class MatchupManager:
         return time_difference <= 120
     
     def is_end_matchup_time(self) -> bool:
-        """Check if it's time to activate matchups (Thursday 7:30 PM UTC)"""
         current_time = datetime.now(timezone.utc)
 
-        if current_time.weekday() != 2:
+        if current_time.weekday() != 1:
             return False
             
         activation_time = time(6, 10, tzinfo=timezone.utc)
@@ -53,7 +52,7 @@ class MatchupManager:
         )
         
         time_difference = abs((current_time - current_day_activation).total_seconds())
-        return time_difference <= 120
+        return time_difference <= 300
 
     async def _check_matchup_activation(self):
         """Background task to check for matchup activation times"""
