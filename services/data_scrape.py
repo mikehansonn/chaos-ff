@@ -28,7 +28,7 @@ class DataScrapeManager:
     def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
         try:
-            week = self.get_week() - 1
+            week = 1
             
             # Scrape data
             proj_data = []
