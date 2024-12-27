@@ -25,10 +25,10 @@ class DataScrapeManager:
             self.db = self.client[db_name]
             self.initialized = True
 
-    def run_full_scrape(self):
+    def run_full_scrape(self, week):
         """Run a complete scrape of projection and week data"""
         try:
-            week = 1
+            # week = self.get_week()
             
             # Scrape data
             proj_data = []
