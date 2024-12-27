@@ -44,7 +44,7 @@ class DataScrapeManager:
 
     async def run_full_scrape(self):
         """Run a complete scrape of projection and week data"""
-        # Get current week (or use a fixed week for testing)
+        # Get current week
         week = self.get_week()
         
         # Scrape data
@@ -61,8 +61,8 @@ class DataScrapeManager:
         self.scrape_week_data(week, 3, 9, week_data, 'K')
         self.scrape_week_data(week, 2, 11, week_data, '8')
 
-        # Load existing players
-        players = self.load_nfl_players()
+        # Load existing players from database
+        players = await self.load_nfl_players()
 
         # Process and update player data
         updated_players = self.process_player_data(players, proj_data, week_data, week)
@@ -70,14 +70,9 @@ class DataScrapeManager:
         # Sort players by projected points
         updated_players.sort(key=lambda x: x['projected_points'], reverse=True)
 
-        # Update database and save to file
+        # Update database
         for player in updated_players:
             await self.write_individual_player(player)
-
-        # Save to JSON file
-        filename = "proj_players.json"
-        with open(filename, 'w') as json_file:
-            json.dump(updated_players, json_file, indent=4)
 
         print(f"Completed data scrape for week {week}")
 
@@ -239,14 +234,11 @@ class DataScrapeManager:
                 print(f"Failed to fetch data. Status code: {response.status_code}")
             num += 25
 
-    def load_nfl_players(self):
-        file_path = 'proj_players.json'
+    async def load_nfl_players(self) -> List[Dict]:
+        """Load NFL players from database"""
         try:
-            with open(file_path, 'r') as file:
-                players_data = json.load(file)
-            
             players = []
-            for player_data in players_data:
+            async for player_data in self.db.nflplayers.find({}):
                 # Create new NFLPlayer instance
                 player = FakeNFLPlayer(
                     name=player_data['name'],
@@ -270,14 +262,8 @@ class DataScrapeManager:
                 players.append(player.to_dict())
             
             return players
-        except FileNotFoundError:
-            print(f"Error: File not found at {file_path}")
-            return []
-        except json.JSONDecodeError:
-            print(f"Error: Invalid JSON format in file {file_path}")
-            return []
-        except KeyError as e:
-            print(f"Error: Missing required field in JSON data: {e}")
+        except Exception as e:
+            print(f"Error loading players from database: {e}")
             return []
 
     def process_player_data(self, players, proj_data, week_data, week):
@@ -336,21 +322,23 @@ class DataScrapeManager:
         return current_players
 
     async def write_individual_player(self, player):
-        db = get_database()
-        
-        player_object = await db.nflplayers.find_one({"name": player["name"]})
-        
-        if player_object:
-            await db.nflplayers.update_one(
-                {"_id": player_object["_id"]},
-                {
-                    "$set": {
-                        "weeks": player["weeks"],
-                        "projected_points": player["projected_points"],
-                        "total_points": player["total_points"],
-                        "opponent": player["opponent"],   
-                        "injury_status": player["injury_status"]
-                    }
-                })
-        else:
-            await db.nflplayers.insert_one(player)
+        """Write individual player data to database"""
+        try:
+            player_object = await self.db.nflplayers.find_one({"name": player["name"]})
+            
+            if player_object:
+                await self.db.nflplayers.update_one(
+                    {"_id": player_object["_id"]},
+                    {
+                        "$set": {
+                            "weeks": player["weeks"],
+                            "projected_points": player["projected_points"],
+                            "total_points": player["total_points"],
+                            "opponent": player["opponent"],   
+                            "injury_status": player["injury_status"]
+                        }
+                    })
+            else:
+                await self.db.nflplayers.insert_one(player)
+        except Exception as e:
+            print(f"Error writing player to database: {e}")
