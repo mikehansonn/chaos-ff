@@ -34,13 +34,7 @@ def run_data_scrape():
         scrape_manager = DataScrapeManager()
         
         # Run scrape
-        result = scrape_manager.run_full_scrape(8)
-        result = scrape_manager.run_full_scrape(9)
-        result = scrape_manager.run_full_scrape(10)
-        result = scrape_manager.run_full_scrape(11)
-        result = scrape_manager.run_full_scrape(12)
-        result = scrape_manager.run_full_scrape(13)
-        result = scrape_manager.run_full_scrape(14)
+        result = scrape_manager.run_full_scrape(15)
         
         return {
             "status": "success", 
