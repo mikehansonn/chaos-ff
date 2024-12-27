@@ -1,6 +1,7 @@
 Demo URL: https://chaos-ff-app-b564eaadb8cf.herokuapp.com/
 
 Chaos Fantasy is a fantasy football application inspired by others like ESPN Fantasy and Yahoo Fantasy.
+
 Technologies:
 - Python (FastAPI)
 - React
