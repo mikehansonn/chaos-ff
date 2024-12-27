@@ -1,10 +1,12 @@
+# Chaos Fantasy
+
 Demo URL: https://chaos-ff-app-b564eaadb8cf.herokuapp.com/
 
 Demo Video: https://github.com/user-attachments/assets/34ded538-34f0-4e38-b310-4567b78bd804
 
 Chaos Fantasy is a fantasy football application inspired by others like ESPN Fantasy and Yahoo Fantasy.
 
-Technologies:
+## Technologies:
 - Python (FastAPI)
 - React
 - MongoDB
@@ -17,7 +19,7 @@ Technologies:
 - Git
 - Docker
 
-Notable Features:
+## Notable Features:
 - Profile login/logout
 - Create Leagues with up to 20 player capacity
 - Join Leagues with Invite IDs
