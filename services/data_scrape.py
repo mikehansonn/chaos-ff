@@ -57,11 +57,6 @@ class DataScrapeManager:
             for player in updated_players:
                 self.write_individual_player(player)
 
-            # Save to JSON file
-            filename = "proj_players.json"
-            with open(filename, 'w') as json_file:
-                json.dump(updated_players, json_file, indent=4)
-
             print(f"Completed data scrape for week {week}")
             return updated_players
 
@@ -209,10 +204,10 @@ class DataScrapeManager:
             num += 25
 
     def load_nfl_players(self):
-        file_path = 'proj_players.json'
+        """Load all NFL players from MongoDB database"""
         try:
-            with open(file_path, 'r') as file:
-                players_data = json.load(file)
+            collection = self.db.nflplayers
+            players_data = list(collection.find({}))
             
             players = []
             for player_data in players_data:
@@ -239,14 +234,8 @@ class DataScrapeManager:
                 players.append(player.to_dict())
             
             return players
-        except FileNotFoundError:
-            print(f"Error: File not found at {file_path}")
-            return []
-        except json.JSONDecodeError:
-            print(f"Error: Invalid JSON format in file {file_path}")
-            return []
-        except KeyError as e:
-            print(f"Error: Missing required field in JSON data: {e}")
+        except Exception as e:
+            print(f"Error loading players from database: {e}")
             return []
 
     def process_player_data(self, players, proj_data, week_data, week):
@@ -305,7 +294,7 @@ class DataScrapeManager:
         return current_players
 
     def write_individual_player(self, player):
-        """Synchronous version of database write"""
+        """Write individual player to MongoDB database"""
         collection = self.db.nflplayers
         
         player_object = collection.find_one({"name": player["name"]})
@@ -319,7 +308,9 @@ class DataScrapeManager:
                         "projected_points": player["projected_points"],
                         "total_points": player["total_points"],
                         "opponent": player["opponent"],   
-                        "injury_status": player["injury_status"]
+                        "injury_status": player["injury_status"],
+                        "team": player["team"],
+                        "position": player["position"]
                     }
                 })
         else:
