@@ -487,6 +487,30 @@ const UserLogin = () => {
     }
   };
 
+  const handleGuestLogin = async () => {
+    setCredentials({
+      username: 'admin',
+      password: 'pass'
+    });
+    
+    try {
+      const guestCredentials = {
+        username: 'admin',
+        password: 'pass'
+      };
+      
+      const response = await api.post('/token', new URLSearchParams(guestCredentials));
+      tokenUtil.setToken(response.data.access_token);
+      setIsLoggedIn(true);
+      
+      const from = location.state?.from || '/user/profile';
+      navigate(from);
+    } catch (err) {
+      setError('Guest login failed. Please try again later.');
+      console.error('Guest login error:', err);
+    }
+  };
+
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     setError('');
@@ -587,6 +611,13 @@ const UserLogin = () => {
             className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold p-3 rounded-lg shadow-lg text-sm sm:text-md flex justify-center items-center transition-all"
           >
             Sign In
+          </button>
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            className="w-full bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 text-white font-bold p-3 rounded-lg shadow-lg text-sm sm:text-md flex justify-center items-center transition-all"
+          >
+            Continue as Guest
           </button>
           <button
             type="button"
