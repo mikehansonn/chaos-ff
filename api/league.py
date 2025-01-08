@@ -565,6 +565,13 @@ async def remove_league(league_id: str):
         async with await db.client.start_session() as session:
             async with session.start_transaction():
                 league = await db.leagues.find_one({"_id": object_league_id}, session=session)
+
+                if not league:
+                    raise HTTPException(status_code=404, detail="League not found")
+                
+                if str(league["commissioner"]) == "66fef1d3baec7927b3f35e08":
+                    raise HTTPException(status_code=403, detail="This league cannot be deleted")
+
                 teams = league["teams"].copy()
                 matchups = league["schedule"].copy()
 
