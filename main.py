@@ -53,6 +53,7 @@ async def celery_status():
 # Configure CORS
 origins = [
     "https://chaos-ff-app-b564eaadb8cf.herokuapp.com",
+    "https://chaosff.netlify.app/",
     "http://localhost:3000"
 ]
 
