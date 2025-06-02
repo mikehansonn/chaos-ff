@@ -56,7 +56,7 @@ origins = [
     "https://chaosff.netlify.app",
     "http://localhost:3000"
 ]
-
+ 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
